@@ -87,35 +87,21 @@
         }
 
         function DownloadPDF() {
-    if (DWTObject) {
-        if (DWTObject.HowManyImagesInBuffer > 0) {
-            // Try to extract order number from the specific div in Business Central
-            var orderNumberElement = document.querySelector("body > div.off-canvas-rendering p");
-            var orderNumberText = orderNumberElement ? orderNumberElement.innerText.trim() : null;
-
-            if (orderNumberText) {
-                // Extract only the order number (before the '∙' symbol)
-                var orderNumber = orderNumberText.split(" ∙ ")[0]; 
-
-                var filePath = "D:/BLOG/" + orderNumber + ".pdf";
-
-                DWTObject.SaveAllAsPDF(filePath, 
-                    function(){
-                        alert("PDF downloaded successfully as " + orderNumber + ".pdf");
-                    }, 
-                    function(errorCode, errorString){
-                        alert("Error: " + errorString);
-                    }
-                );
-            } else {
-                alert("Order number not found.");
+            if (DWTObject) {
+                if (DWTObject.HowManyImagesInBuffer > 0) {
+                    DWTObject.SaveAllAsPDF("D:/BLOG/ScannedDocument.pdf", 
+                        function(){
+                            alert("PDF downloaded successfully.");
+                        }, 
+                        function(errorCode, errorString){
+                            alert("Error: " + errorString);
+                        }
+                    );
+                } else {
+                    alert("No scanned image to download.");
+                }
             }
-        } else {
-            alert("No scanned image to download.");
         }
-    }
-}
-
 
         function ResetContainer() {
             location.reload();
