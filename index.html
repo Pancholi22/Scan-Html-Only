@@ -89,19 +89,30 @@
         function DownloadPDF() {
             if (DWTObject) {
                 if (DWTObject.HowManyImagesInBuffer > 0) {
-                    DWTObject.SaveAllAsPDF("D:/BLOG/ScannedDocument.pdf", 
+            // Extract order number from the page title
+                var titleText = document.title;  // Example: "Sales Order - S-ORD101001 ∙ Adatum Corporation"
+                var orderNumberMatch = titleText.match(/Sales Order - (\S+)/);
+                    
+                if (orderNumberMatch && orderNumberMatch[1]) {
+                    var orderNumber = orderNumberMatch[1];  // Extracts "S-ORD101001"
+                    var filePath = "D:/BLOG/" + orderNumber + ".pdf";
+
+                    DWTObject.SaveAllAsPDF(filePath, 
                         function(){
-                            alert("PDF downloaded successfully.");
+                            alert("PDF downloaded successfully as " + orderNumber + ".pdf");
                         }, 
                         function(errorCode, errorString){
                             alert("Error: " + errorString);
                         }
                     );
                 } else {
-                    alert("No scanned image to download.");
+                    alert("Order number not found in title.");
                 }
+            } else {
+            alert("No scanned image to download.");
             }
         }
+}
 
         function ResetContainer() {
             location.reload();
