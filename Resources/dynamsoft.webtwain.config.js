@@ -12,7 +12,7 @@ var Dynamsoft = Dynamsoft || { DWT: {} };
 ///
 Dynamsoft.DWT.AutoLoad = true;
 ///
-Dynamsoft.DWT.Containers = [{ WebTwainId: '', ContainerId: 'dwtcontrolContainer', Width: 500, Height: 650 }];
+Dynamsoft.DWT.Containers = [{ WebTwainId: '', ContainerId: 'dwtcontrolContainer', Width: 400, Height: 500 }];
 
 /////////////////////////////////////////////////////////////////////////////////////
 //  WARNING:  The productKey in this file is protected by copyright law            //
