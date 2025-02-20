@@ -87,32 +87,32 @@
         }
 
         function DownloadPDF() {
-            if (DWTObject) {
-                if (DWTObject.HowManyImagesInBuffer > 0) {
-            // Extract order number from the page title
-                var titleText = document.title;  // Example: "Sales Order - S-ORD101001 ∙ Adatum Corporation"
-                var orderNumberMatch = titleText.match(/Sales Order - (\S+)/);
-                    
-                if (orderNumberMatch && orderNumberMatch[1]) {
-                    var orderNumber = orderNumberMatch[1];  // Extracts "S-ORD101001"
-                    var filePath = "D:/BLOG/" + orderNumber + ".pdf";
+    if (DWTObject) {
+        if (DWTObject.HowManyImagesInBuffer > 0) {
+            // Try to extract order number from the specific div in Business Central
+            var orderNumberElement = document.querySelector("body > div:nth-child(11)");
+            var orderNumber = orderNumberElement ? orderNumberElement.innerText.trim() : null;
 
-                    DWTObject.SaveAllAsPDF(filePath, 
-                        function(){
-                            alert("PDF downloaded successfully as " + orderNumber + ".pdf");
-                        }, 
-                        function(errorCode, errorString){
-                            alert("Error: " + errorString);
-                        }
-                    );
-                } else {
-                    alert("Order number not found in title.");
-                }
+            if (orderNumber) {
+                var filePath = "D:/BLOG/" + orderNumber + ".pdf";
+
+                DWTObject.SaveAllAsPDF(filePath, 
+                    function(){
+                        alert("PDF downloaded successfully as " + orderNumber + ".pdf");
+                    }, 
+                    function(errorCode, errorString){
+                        alert("Error: " + errorString);
+                    }
+                );
             } else {
-            alert("No scanned image to download.");
+                alert("Order number not found in the specified div.");
             }
+        } else {
+            alert("No scanned image to download.");
         }
+    }
 }
+
 
         function ResetContainer() {
             location.reload();
