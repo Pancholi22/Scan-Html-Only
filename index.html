@@ -11,41 +11,40 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            /* height: 100vh; */
             background-color: #f4f4f4;
         }
         #input-container {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             align-items: center;
             margin-bottom: 20px;
+            gap: 10px;
+            margin-top: 20px;
         }
-        #large-input {
-            width: 400px;
-            height: 50px;
+        #scan-button, #cancel-button {
+            width: 200px;
+            height: 35px;
             font-size: 18px;
-            padding: 10px;
-            border: 2px solid #ccc;
-            border-radius: 5px;
-            margin-bottom: 10px;
-        }
-        #scan-button {
-            width: 420px;
-            height:35px;
-            font-size: 18px;
-            background-color: #28a745;
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            margin-top: 30px;
+        }
+        #scan-button {
+            background-color: #28a745;
         }
         #scan-button:hover {
             background-color: #218838;
         }
+        #cancel-button {
+            background-color: #dc3545;
+        }
+        #cancel-button:hover {
+            background-color: #c82333;
+        }
         #dwtcontrolContainer {
             width: 500px;
-            height:650px;
+            height: 650px;
             background-color: white;
             border: 2px solid #ccc;
             margin-top: 20px;
@@ -57,16 +56,19 @@
     <div id="dwtcontrolContainer"></div>
     <div id="input-container">
         <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
+        <input type="button" id="cancel-button" value="Cancel" onclick="ResetContainer();" />
     </div>
     
     <script type="text/javascript">
         var DWTObject;
-        // Register event to initialize the Dynamic Web TWAIN object
-        Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-            DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
-        }); 
+        function InitializeDWT() {
+            Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
+                DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+            });
+        }
+        
+        InitializeDWT();
 
-        // Acquire image from scanner
         function AcquireImage() {
             if (DWTObject) {
                 DWTObject.SelectSourceAsync()
@@ -76,7 +78,6 @@
                         });
                     })
                     .then(function() {
-                        // After successful scan, automatically trigger the download process
                         DownloadPDF();
                     })
                     .catch(function (exp) {
@@ -85,7 +86,6 @@
             }
         }
 
-        // Save all scanned images as a PDF file automatically
         function DownloadPDF() {
             if (DWTObject) {
                 if (DWTObject.HowManyImagesInBuffer > 0) {
@@ -101,6 +101,10 @@
                     alert("No scanned image to download.");
                 }
             }
+        }
+
+        function ResetContainer() {
+            location.reload();
         }
     </script>
 </body>
