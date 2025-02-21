@@ -86,35 +86,32 @@
             }
         }
 
-        function DownloadPDF() {
-    if (DWTObject) {
-        if (DWTObject.HowManyImagesInBuffer > 0) {
-            // Try to extract order number from the specific div in Business Central
-            var orderNumberElement = document.querySelector("body > div.off-canvas-rendering p");
-            var orderNumberText = orderNumberElement ? orderNumberElement.innerText.trim() : null;
-
-            if (orderNumberText) {
-                // Extract only the order number (before the '∙' symbol)
-                var orderNumber = orderNumberText.split(" ∙ ")[0]; 
-
-                var filePath = "D:/BLOG/" + orderNumber + ".pdf";
-
-                DWTObject.SaveAllAsPDF(filePath, 
-                    function(){
-                        alert("PDF downloaded successfully as " + orderNumber + ".pdf");
-                    }, 
-                    function(errorCode, errorString){
-                        alert("Error: " + errorString);
-                    }
-                );
-            } else {
-                alert("Order number not found.");
-            }
-        } else {
-            alert("No scanned image to download.");
+        function getQueryParameter(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name) || "";
         }
-    }
-}
+
+        function DownloadPDF() {
+            if (DWTObject) {
+                if (DWTObject.HowManyImagesInBuffer > 0) {
+                    let orderNumber = getQueryParameter("orderNo"); 
+                    let filePath = getQueryParameter("filePath"); 
+                    let fileName = orderNumber + ".pdf";
+                    let fullPath = filePath + fileName;
+
+                    DWTObject.SaveAllAsPDF(fullPath,
+                        function () {
+                            alert("PDF saved successfully at: " + fullPath);
+                        },
+                        function (errorCode, errorString) {
+                            alert("Error: " + errorString);
+                        }
+                    );
+                } else {
+                    alert("No scanned image to download.");
+                }
+            }
+        }
 
 
         function ResetContainer() {
