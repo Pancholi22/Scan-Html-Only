@@ -53,7 +53,7 @@
             height: 500px;
             background-color: white;
             border: 2px solid #ccc;
-            margin-top: 60px; /* Add margin to prevent overlap with fixed buttons */
+            margin-top: 60px;
         }
     </style>
 </head>
@@ -88,7 +88,7 @@
                         DownloadPDF();
                     })
                     .catch(function (exp) {
-                        alert(exp.message);
+                        console.error(exp.message);
                     });
             }
         }
@@ -108,14 +108,12 @@
 
                     DWTObject.SaveAllAsPDF(fullPath,
                         function () {
-                            alert("PDF saved successfully at: " + fullPath);
+                            console.log("PDF saved successfully at: " + fullPath);
                         },
                         function (errorCode, errorString) {
-                            alert("Error: " + errorString);
+                            console.error("Error: " + errorString);
                         }
                     );
-                } else {
-                    alert("No scanned image to download.");
                 }
             }
         }
