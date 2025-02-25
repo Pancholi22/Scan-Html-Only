@@ -105,7 +105,9 @@
                     let filePath = getQueryParameter("filePath"); 
                     let fileName = orderNumber;
                     let fullPath = filePath + fileName;
-
+                    DWTObject.IfShowFileDialog=False;
+                    DWTObject.IfShowSaveDialog=False;
+                    DWTObject.ShowFileDialog=False;
                     DWTObject.SaveAllAsPDF(fullPath,
                         function () {
                             console.log("PDF saved successfully at: " + fullPath);
