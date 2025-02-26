@@ -102,7 +102,7 @@
                 if (DWTObject.HowManyImagesInBuffer > 0) {
                     let orderNumber = getQueryParameter("orderNo"); 
                     let filePath = getQueryParameter("filePath"); 
-                    let fileName = orderNumber + ".pdf";
+                    let fileName = orderNumber;
                     let fullPath = filePath + fileName;
                     DWTObject.IfShowFileDialog = false;
                     // DWTObject.IfShowSaveDialog = false;
