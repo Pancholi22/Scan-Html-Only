@@ -68,30 +68,29 @@
     
     <script type="text/javascript">
         var DWTObject;
-        function InitializeDWT() {
-            Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-                DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
-            });
-        }
-        
-        InitializeDWT();
+        // Register event to initialize the Dynamic Web TWAIN object
+        Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
+            DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+        });
 
+        // Acquire image from scanner
         function AcquireImage() {
             if (DWTObject) {
                 DWTObject.SelectSourceAsync()
-                    .then(function(){
+                    .then(function () {
                         return DWTObject.AcquireImageAsync({
-                            IfCloseSourceAfterAcquire: true 
+                            IfCloseSourceAfterAcquire: true
                         });
                     })
-                    .then(function() {
+                    .then(function () {
                         DownloadPDF();
                     })
                     .catch(function (exp) {
-                        console.error(exp.message);
+                        alert(exp.message);
                     });
             }
         }
+
 
         function getQueryParameter(name) {
             const params = new URLSearchParams(window.location.search);
@@ -103,25 +102,23 @@
                 if (DWTObject.HowManyImagesInBuffer > 0) {
                     let orderNumber = getQueryParameter("orderNo"); 
                     let filePath = getQueryParameter("filePath"); 
-                    let fileName = orderNumber;
+                    let fileName = orderNumber + ".pdf";
                     let fullPath = filePath + fileName;
-                    DWTObject.IfShowFileDialog=False;
-                    DWTObject.IfShowSaveDialog=False;
-                    DWTObject.ShowFileDialog=False;
+                    DWTObject.IfShowFileDialog = false;
+                    // DWTObject.IfShowSaveDialog = false;
+                    DWTObject.ShowFileDialog = false;
                     DWTObject.SaveAllAsPDF(fullPath,
                         function () {
                             alert("PDF saved successfully at: " + fullPath);
                         },
                         function (errorCode, errorString) {
-                            console.error("Error: " + errorString);
+                            alert("Error: " + errorString);
                         }
                     );
+                } else {
+                    alert("No scanned image to download.");
                 }
             }
-        }
-
-        function ResetContainer() {
-            location.reload();
         }
     </script>
 </body>
