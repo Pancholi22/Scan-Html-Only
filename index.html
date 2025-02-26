@@ -110,7 +110,7 @@
                     DWTObject.ShowFileDialog=False;
                     DWTObject.SaveAllAsPDF(fullPath,
                         function () {
-                            console.log("PDF saved successfully at: " + fullPath);
+                            alert("PDF saved successfully at: " + fullPath);
                         },
                         function (errorCode, errorString) {
                             console.error("Error: " + errorString);
