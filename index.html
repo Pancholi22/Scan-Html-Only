@@ -83,6 +83,7 @@
                     return Promise.reject("No scanner available.");
                 }
                 return DWTObject.OpenSourceAsync();
+                
             })
             .then(function () {
                 return DWTObject.AcquireImageAsync({
