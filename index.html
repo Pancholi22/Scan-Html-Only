@@ -68,30 +68,36 @@
     
     <script type="text/javascript">
         var DWTObject;
-        function InitializeDWT() {
-            Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-                DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
-            });
-        }
-        
-        InitializeDWT();
+        // Register event to initialize the Dynamic Web TWAIN object
+        Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
+            DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+        });
 
+        // Acquire image from scanner
         function AcquireImage() {
-            if (DWTObject) {
-                DWTObject.SelectSourceAsync()
-                    .then(function(){
-                        return DWTObject.AcquireImageAsync({
-                            IfCloseSourceAfterAcquire: true 
-                        });
-                    })
-                    .then(function() {
-                        DownloadPDF();
-                    })
-                    .catch(function (exp) {
-                        console.error(exp.message);
-                    });
-            }
-        }
+    if (DWTObject) {
+        DWTObject.GetSourceNamesAsync()
+            .then(function (sources) {
+                if (sources.length === 0) {
+                    alert("No scanner detected. Please connect a scanner and try again.");
+                    return Promise.reject("No scanner available.");
+                }
+                return DWTObject.OpenSourceAsync();
+            })
+            .then(function () {
+                return DWTObject.AcquireImageAsync({
+                    IfCloseSourceAfterAcquire: true 
+                });
+            })
+            .then(function () {
+                DownloadPDF();
+            })
+            .catch(function (exp) {
+                console.error(exp.message);
+            });
+    }
+}
+
 
         function getQueryParameter(name) {
             const params = new URLSearchParams(window.location.search);
@@ -105,20 +111,24 @@
                     let filePath = getQueryParameter("filePath"); 
                     let fileName = orderNumber;
                     let fullPath = filePath + fileName;
-
+                    DWTObject.IfShowFileDialog = false;
+                    // DWTObject.IfShowSaveDialog = false;
+                    DWTObject.ShowFileDialog = false;
                     DWTObject.SaveAllAsPDF(fullPath,
                         function () {
-                            console.log("PDF saved successfully at: " + fullPath);
+                            alert("PDF saved successfully at: " + fullPath);
                         },
                         function (errorCode, errorString) {
-                            console.error("Error: " + errorString);
+                            alert("Error: " + errorString);
                         }
                     );
+                } else {
+                    alert("No scanned image to download.");
                 }
             }
         }
 
-        function ResetContainer() {
+         function ResetContainer() {
             location.reload();
         }
     </script>
