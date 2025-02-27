@@ -75,21 +75,28 @@
 
         // Acquire image from scanner
         function AcquireImage() {
-            if (DWTObject) {
-                DWTObject.SelectSourceAsync()
-                    .then(function () {
-                        return DWTObject.AcquireImageAsync({
-                            IfCloseSourceAfterAcquire: true
-                        });
-                    })
-                    .then(function () {
-                        DownloadPDF();
-                    })
-                    .catch(function (exp) {
-                        alert(exp.message);
-                    });
-            }
-        }
+    if (DWTObject) {
+        DWTObject.GetSourceNamesAsync()
+            .then(function (sources) {
+                if (sources.length === 0) {
+                    alert("No scanner detected. Please connect a scanner and try again.");
+                    return Promise.reject("No scanner available.");
+                }
+                return DWTObject.OpenSourceAsync();
+            })
+            .then(function () {
+                return DWTObject.AcquireImageAsync({
+                    IfCloseSourceAfterAcquire: true 
+                });
+            })
+            .then(function () {
+                DownloadPDF();
+            })
+            .catch(function (exp) {
+                console.error(exp.message);
+            });
+    }
+}
 
 
         function getQueryParameter(name) {
