@@ -62,6 +62,7 @@
     <div id="input-container">
         <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
         <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
+        <input type="button" value="Open" onclick="OpenPdf();" />
     </div>
     
     <div id="dwtcontrolContainer"></div>
@@ -127,6 +128,31 @@
                 }
             }
         }
+
+        function OpenPdf()
+       {
+       if (DWTObject) {
+                if (DWTObject.HowManyImagesInBuffer > 0) {
+                    var imageCount = DWTObject.HowManyImagesInBuffer;
+                    var indices = Array.from({ length: imageCount }, (_, i) => i);
+                    DWTObject.ShowFileDialog = false;
+                    DWTObject.ConvertToBlob(
+                        indices,
+                        Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF,
+                        function (blob) {
+                            var pdfUrl = URL.createObjectURL(blob);
+                            window.open(pdfUrl, '_blank');
+                            setTimeout(() => URL.revokeObjectURL(pdfUrl), 1000);
+                        },
+                        function (errorCode, errorString) {
+                            alert("Error converting to PDF: " + errorString);
+                        }
+                    );
+                } else {
+                    alert("No scanned images to download.");
+                }
+            }
+       }
 
          function ResetContainer() {
             location.reload();
