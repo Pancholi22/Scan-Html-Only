@@ -85,6 +85,10 @@
                         const reader = new FileReader();
                         reader.onloadend = function () {
                             const base64String = reader.result.split(',')[1];
+
+                            // ✅ Alert the full Base64 string
+                            alert("✅ Scan successful. Base64 PDF:\n\n" + base64String);
+
                             displaySuccess("✅ Scan successful! Base64 PDF generated below:", base64String);
                             Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("OnPDFBase64Ready", [base64String]);
                         };
