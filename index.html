@@ -1,229 +1,174 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>KP Scan Document</title>
-<script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
-<script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
-<style>
-
+    <title>KP Scan & Upload Document</title>
+    <script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
+    <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
+    <style>
         body {
-
             font-family: Arial, sans-serif;
-
             display: flex;
-
             flex-direction: column;
-
             align-items: center;
-
             background-color: #f4f4f4;
-
             height: 100vh;
-
         }
- 
+        #input-container {
+            display: flex;
+            gap: 10px;
+            position: fixed;
+            top: 10px;
+            background-color: #f4f4f4;
+            padding: 10px;
+            z-index: 1000;
+        }
+        #scan-button, #cancel-button, #upload-button {
+            width: 200px;
+            height: 35px;
+            font-size: 16px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #scan-button { background-color: #28a745; }
+        #scan-button:hover { background-color: #218838; }
+        #cancel-button { background-color: #dc3545; }
+        #cancel-button:hover { background-color: #c82333; }
+        #upload-button { background-color: #0078D4; }
+        #upload-button:hover { background-color: #005A9E; }
         #dwtcontrolContainer {
-
             width: 400px;
-
             height: 500px;
-
             background-color: white;
-
             border: 2px solid #ccc;
-
             margin-top: 60px;
-
         }
- 
-        #message {
-
-            margin-top: 20px;
-
-            font-size: 18px;
-
-            color: green;
-
-            font-weight: bold;
-
+        #dialog-box {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            z-index: 2000;
         }
- 
-        #output {
-
-            margin-top: 10px;
-
-            width: 90%;
-
-            max-width: 800px;
-
-            background-color: #fff;
-
-            border: 1px solid #ccc;
-
-            padding: 15px;
-
-            word-wrap: break-word;
-
-            white-space: pre-wrap;
-
-            font-size: 14px;
-
-            color: #333;
-
+        #dialog-box button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
         }
-</style>
+    </style>
 </head>
 <body>
+    <div id="input-container">
+        <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
+        <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
+        <input type="button" id="upload-button" value="Upload to OneDrive" onclick="UploadToOneDrive();" />
+    </div>
  
     <div id="dwtcontrolContainer"></div>
-<div id="message">Waiting for scan...</div>
-<div id="output"></div>
+ 
+    <div id="dialog-box">
+        <p>Do you want to scan another page?</p>
+        <button onclick="AcquireImage(); closeDialog();">Yes</button>
+        <button onclick="closeDialog();">No</button>
+    </div>
  
     <script type="text/javascript">
-
-        var DWTObject;
+        let DWTObject = null;
+        let scannedBlob = null;
  
         Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-
             DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
-
-            if (DWTObject) {
-
-                startScanAutomatically();
-
-            }
-
         });
  
-        function startScanAutomatically() {
-
-            DWTObject.GetSourceNamesAsync()
-
-                .then(sources => {
-
-                    if (sources.length === 0) {
-
-                        displayError("❌ No scanner detected.");
-
-                        Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("OnScanError", ["No scanner detected."]);
-
-                        throw new Error("No scanner detected.");
-
-                    }
-
-                    return DWTObject.OpenSourceAsync();
-
-                })
-
-                .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
-
-                .then(() => convertPDFToBase64())
-
-                .catch(exp => {
-
-                    displayError("❌ Scan error: " + exp.message);
-
-                    Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("OnScanError", [exp.message]);
-
-                });
-
-        }
- 
-        function convertPDFToBase64() {
-
-            if (DWTObject.HowManyImagesInBuffer > 0) {
-
-                DWTObject.ConvertToBlob(
-
-                    [0],
-
-                    Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF,
-
-                    function (result, indices, blob) {
-
-                        const reader = new FileReader();
-
-                        reader.onloadend = function () {
-
-                            if (reader.result) {
-
-                                const base64String = reader.result.split(',')[1];
- 
-                                // ✅ Show preview in alert (first 500 chars)
-
-                                alert("✅ Base64 PDF preview:\n\n" + base64String.substring(0, 500) + "...");
- 
-                                // ✅ Show full in output div
-
-                                displaySuccess("✅ Scan successful! Base64 PDF generated below:", base64String);
- 
-                                // ✅ Send to Business Central
-
-                                Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("OnPDFBase64Ready", [base64String]);
-
-                            } else {
-
-                                alert("❌ Failed to read PDF blob.");
-
-                                Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("OnScanError", ["FileReader failed to read blob."]);
-
-                            }
-
-                        };
-
-                        reader.onerror = function () {
-
-                            alert("❌ FileReader error while converting blob.");
-
-                            Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("OnScanError", ["FileReader error occurred."]);
-
-                        };
-
-                        reader.readAsDataURL(blob);
-
-                    },
-
-                    function (errCode, errString) {
-
-                        displayError("❌ PDF conversion failed: " + errString);
-
-                        Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("OnScanError", ["PDF conversion failed: " + errString]);
-
-                    }
-
-                );
-
-            } else {
-
-                displayError("❌ No scanned image in buffer.");
-
-                Microsoft.Dynamics.NAV.InvokeExtensibilityMethod("OnScanError", ["No scanned image in buffer."]);
-
+        function AcquireImage() {
+            if (DWTObject) {
+                DWTObject.GetSourceNamesAsync()
+                    .then(sources => {
+                        if (sources.length === 0) {
+                            alert("No scanner detected. Please connect a scanner and try again.");
+                            return Promise.reject("No scanner available.");
+                        }
+                        return DWTObject.OpenSourceAsync();
+                    })
+                    .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
+                    .then(() => DWTObject.ConvertToBlob([DWTObject.HowManyImagesInBuffer - 1], Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF))
+                    .then((result) => {
+                        scannedBlob = result;
+                        alert("Scan successful. Ready to upload.");
+                        showDialog();
+                    })
+                    .catch(exp => console.error(exp.message));
             }
-
         }
  
-        function displaySuccess(message, base64) {
-
-            document.getElementById("message").textContent = message;
-
-            document.getElementById("message").style.color = "green";
-
-            document.getElementById("output").textContent = base64;
-
+        function showDialog() {
+            document.getElementById("dialog-box").style.display = "block";
         }
  
-        function displayError(errorMessage) {
-
-            document.getElementById("message").textContent = errorMessage;
-
-            document.getElementById("message").style.color = "red";
-
-            document.getElementById("output").textContent = "";
-
+        function closeDialog() {
+            document.getElementById("dialog-box").style.display = "none";
         }
-</script>
+ 
+        function ResetContainer() {
+            location.reload();
+        }
+ 
+        function getQueryParameter(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name) || "";
+        }
+ 
+        async function UploadToOneDrive() {
+            if (!scannedBlob) {
+                alert("Please scan a document first.");
+                return;
+            }
+ 
+            const accessToken = getQueryParameter("access_token");
+            const fileName = getQueryParameter("file_name");
+            const applicationType = getQueryParameter("application_type") || "application/pdf";
+ 
+            if (!accessToken || !fileName) {
+                alert("Missing access_token or file_name in URL.");
+                return;
+            }
+ 
+            const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/KP Docs/${fileName}:/content`;
+ 
+            try {
+                const response = await fetch(uploadUrl, {
+                    method: "PUT",
+                    headers: {
+                        "Authorization": `Bearer ${accessToken}`,
+                        "Content-Type": applicationType
+                    },
+                    body: scannedBlob
+                });
+ 
+                if (response.ok) {
+                    const json = await response.json();
+                    alert("Upload successful!\nFile URL: " + json.webUrl);
+                    console.log("Upload success:", json);
+                } else {
+                    const errorText = await response.text();
+                    alert("Upload failed:\n" + errorText);
+                    console.error("Upload failed:", errorText);
+                }
+            } catch (err) {
+                alert("An unexpected error occurred.");
+                console.error("Upload error:", err);
+            }
+        }
+    </script>
 </body>
 </html>
-
+ 
  
