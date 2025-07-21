@@ -127,46 +127,47 @@
         }
  
         async function UploadToOneDrive() {
-            if (!scannedBlob) {
-                alert("Please scan a document first.");
-                return;
-            }
- 
-            const accessToken = getQueryParameter("access_token");
-            const fileName = getQueryParameter("file_name");
-            const applicationType = getQueryParameter("application_type") || "application/pdf";
- 
-            if (!accessToken || !fileName) {
-                alert("Missing access_token or file_name in URL.");
-                return;
-            }
- 
-            const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/KP Docs/${fileName}:/content`;
- 
-            try {
-                const response = await fetch(uploadUrl, {
-                    method: "PUT",
-                    headers: {
-                        "Authorization": `Bearer ${accessToken}`,
-                        "Content-Type": applicationType
-                    },
-                    body: scannedBlob
-                });
- 
-                if (response.ok) {
-                    const json = await response.json();
-                    alert("Upload successful!\nFile URL: " + json.webUrl);
-                    console.log("Upload success:", json);
-                } else {
-                    const errorText = await response.text();
-                    alert("Upload failed:\n" + errorText);
-                    console.error("Upload failed:", errorText);
-                }
-            } catch (err) {
-                alert("An unexpected error occurred.");
-                console.error("Upload error:", err);
-            }
+    if (!scannedBlob) {
+        alert("Please scan a document first.");
+        return;
+    }
+
+    const accessToken = getQueryParameter("access_token");
+    const fileName = getQueryParameter("file_name");
+    const applicationType = getQueryParameter("application_type") || "application/pdf";
+
+    if (!accessToken || !fileName) {
+        alert("Missing access_token or file_name in URL.");
+        return;
+    }
+
+    const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/KP Docs/${fileName}:/content`;
+
+    try {
+        const response = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "Content-Type": applicationType
+            },
+            body: scannedBlob
+        });
+
+        if (response.ok) {
+            const json = await response.json();
+            alert("File uploaded successfully to OneDrive.\n\nFile URL: " + json.webUrl);
+            window.close(); // This will attempt to close the page
+        } else {
+            const errorText = await response.text();
+            alert("Upload failed:\n" + errorText);
+            console.error("Upload failed:", errorText);
         }
+    } catch (err) {
+        alert("An unexpected error occurred.");
+        console.error("Upload error:", err);
+    }
+}
+
     </script>
 </body>
 </html>
