@@ -7,127 +7,137 @@
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
 
 <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #f4f4f4;
-            height: 100vh;
-        }
-        #input-container {
-            display: flex;
-            gap: 10px;
-            position: fixed;
-            top: 10px;
-            background-color: #f4f4f4;
-            padding: 10px;
-            z-index: 1000;
-        }
-        #scan-button, #cancel-button {
-            width: 200px;
-            height: 35px;
-            font-size: 16px;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #scan-button { background-color: #28a745; }
-        #scan-button:hover { background-color: #218838; }
-        #cancel-button { background-color: #dc3545; }
-        #cancel-button:hover { background-color: #c82333; }
+    body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background-color: #f4f4f4;
+        height: 100vh;
+    }
+    #input-container {
+        display: flex;
+        gap: 10px;
+        position: fixed;
+        top: 10px;
+        background-color: #f4f4f4;
+        padding: 10px;
+        z-index: 1000;
+    }
+    #scan-button, #cancel-button {
+        width: 200px;
+        height: 35px;
+        font-size: 16px;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    #scan-button { background-color: #28a745; }
+    #scan-button:hover { background-color: #218838; }
+    #cancel-button { background-color: #dc3545; }
+    #cancel-button:hover { background-color: #c82333; }
 
-        #dwtcontrolContainer {
-            width: 400px;
-            height: 500px;
-            background-color: white;
-            border: 2px solid #ccc;
-            margin-top: 60px;
-        }
-
-        #customPreview {
-            width: 400px;
-            margin-top: 20px;
-            border: 2px solid #ccc;
-            background: white;
-        }
+    /* ★ Your custom preview */
+    #customPreview {
+        width: 400px;
+        height: auto;
+        margin-top: 80px;
+        border: 2px solid #ccc;
+        background: white;
+        padding: 5px;
+    }
 </style>
-</head>
 
+</head>
 <body>
 
+<!-- Buttons -->
 <div id="input-container">
     <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
     <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
 </div>
 
-<!-- DYNAMSOFT PREVIEW (DEFAULT) -->
-<div id="dwtcontrolContainer"></div>
-
-<!-- ⭐ CUSTOM PREVIEW (Your Own Preview) -->
-<h3 style="margin-top:20px;">Custom Preview</h3>
-<img id="customPreview" alt="No preview yet" />
+<!-- ★ Custom preview only -->
+<h3 style="margin-top:80px;">Scanned Document Preview</h3>
+<img id="customPreview" alt="No preview available yet" />
 
 <script type="text/javascript">
 
 let DWTObject = null;
 let scannedBlob = null;
 
+/* When Dynamsoft is ready */
 Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-    DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+    // No container needed because we removed Dynamsoft preview
+    DWTObject = Dynamsoft.DWT.GetWebTwain(null);
 });
 
-/* Read URL parameters */
+/* Get URL parameters */
 function getQueryParameter(name) {
     const params = new URLSearchParams(window.location.search);
     return params.get(name) || "";
 }
 
-/* SCAN FUNCTION */
+/* ★ SCAN FUNCTION (Dynamsoft) */
 function AcquireImage() {
     if (DWTObject) {
         DWTObject.GetSourceNamesAsync()
             .then(sources => {
                 if (sources.length === 0) {
-                    alert("No scanner detected. Please connect a scanner and try again.");
+                    alert("No scanner detected.");
                     return Promise.reject("No scanner available.");
                 }
                 return DWTObject.OpenSourceAsync();
             })
             .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
             .then(() =>
+                // Convert scanned page to JPG for preview
                 DWTObject.ConvertToBlob(
                     [DWTObject.HowManyImagesInBuffer - 1],
-                    Dynamsoft.DWT.EnumDWT_ImageType.IT_JPG  // JPG used for custom preview
+                    Dynamsoft.DWT.EnumDWT_ImageType.IT_JPG
                 )
             )
-            .then((result) => {
-                scannedBlob = result;
+            .then((jpgBlob) => {
 
-                /* ⭐ CALL YOUR CUSTOM PREVIEW */
-                showCustomPreview(result);
+                scannedBlob = jpgBlob;
 
-                /* Upload remains same */
-                uploadToOneDrive();
+                /* ★ SHOW CUSTOM PREVIEW */
+                showCustomPreview(jpgBlob);
+
+                /* Upload PDF version */
+                return convertToPDF();
+            })
+            .then(pdfBlob => {
+                scannedBlob = pdfBlob;
+                uploadToOneDrive();  
             })
             .catch(exp => console.error(exp.message));
     }
 }
 
-/* ⭐ CUSTOM PREVIEW FUNCTION — WORKS INSIDE BUSINESS CENTRAL */
+/* ★ CUSTOM PREVIEW — shows JPG version */
 function showCustomPreview(blob) {
     const reader = new FileReader();
 
-    reader.onload = function (e) {
+    reader.onload = function(e) {
         document.getElementById("customPreview").src = e.target.result;
     };
 
-    reader.readAsDataURL(blob);  // Convert blob to base64 for <img>
+    reader.readAsDataURL(blob);
 }
 
-/* UPLOAD FUNCTION */
+/* Convert scanned image(s) to PDF for upload */
+async function convertToPDF() {
+    return DWTObject.ConvertToBlob(
+        [DWTObject.HowManyImagesInBuffer - 1],
+        Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
+    );
+}
+
+/* ★ UPLOAD FUNCTION */
 async function uploadToOneDrive() {
+
     const accessToken = getQueryParameter("access_token");
     const fileName = getQueryParameter("file_name");
     const applicationType = getQueryParameter("application_type") || "application/pdf";
@@ -146,25 +156,24 @@ async function uploadToOneDrive() {
                 "Authorization": `Bearer ${accessToken}`,
                 "Content-Type": applicationType
             },
-            body: scannedBlob
+            body: scannedBlob  // PDF
         });
 
         if (response.ok) {
             const json = await response.json();
             alert("File uploaded successfully to OneDrive!");
-            console.log("Upload successful. File URL:", json.webUrl);
+            console.log("Upload successful:", json.webUrl);
         } else {
             const errorText = await response.text();
             alert("Upload failed:\n" + errorText);
-            console.error("Upload failed:", errorText);
         }
     } catch (err) {
         alert("An unexpected error occurred.");
-        console.error("Upload error:", err);
+        console.error(err);
     }
 }
 
-/* CLEAR SCREEN */
+/* Reset page */
 function ResetContainer() {
     location.reload();
 }
