@@ -2,8 +2,10 @@
 <html>
 <head>
 <title>KP Scan & Upload Document</title>
+
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
+
 <style>
         body {
             font-family: Arial, sans-serif;
@@ -35,6 +37,7 @@
         #scan-button:hover { background-color: #218838; }
         #cancel-button { background-color: #dc3545; }
         #cancel-button:hover { background-color: #c82333; }
+
         #dwtcontrolContainer {
             width: 400px;
             height: 500px;
@@ -42,55 +45,100 @@
             border: 2px solid #ccc;
             margin-top: 60px;
         }
+
+        #customPreview {
+            width: 400px;
+            margin-top: 20px;
+            border: 2px solid #ccc;
+            background: white;
+        }
 </style>
 </head>
+
 <body>
+
 <div id="input-container">
-<input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
-<input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
+    <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
+    <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
 </div>
+
+<!-- DYNAMSOFT PREVIEW (DEFAULT) -->
 <div id="dwtcontrolContainer"></div>
+
+<!-- ⭐ CUSTOM PREVIEW (Your Own Preview) -->
+<h3 style="margin-top:20px;">Custom Preview</h3>
+<img id="customPreview" alt="No preview yet" />
+
 <script type="text/javascript">
-        let DWTObject = null;
-        let scannedBlob = null;
-        Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-            DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
-        });
-        function getQueryParameter(name) {
-            const params = new URLSearchParams(window.location.search);
-            return params.get(name) || "";
-        }
-        function AcquireImage() {
-            if (DWTObject) {
-                DWTObject.GetSourceNamesAsync()
-                    .then(sources => {
-                        if (sources.length === 0) {
-                            alert("No scanner detected. Please connect a scanner and try again.");
-                            return Promise.reject("No scanner available.");
-                        }
-                        return DWTObject.OpenSourceAsync();
-                    })
-                    .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
-                    .then(() => DWTObject.ConvertToBlob(
-                        [DWTObject.HowManyImagesInBuffer - 1],
-                        Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
-                    ))
-                    .then((result) => {
-                        scannedBlob = result;
-                        uploadToOneDrive(); // Automatically upload after scan
-                    })
-                    .catch(exp => console.error(exp.message));
-            }
-        }
-        async function uploadToOneDrive() {
+
+let DWTObject = null;
+let scannedBlob = null;
+
+Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
+    DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+});
+
+/* Read URL parameters */
+function getQueryParameter(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name) || "";
+}
+
+/* SCAN FUNCTION */
+function AcquireImage() {
+    if (DWTObject) {
+        DWTObject.GetSourceNamesAsync()
+            .then(sources => {
+                if (sources.length === 0) {
+                    alert("No scanner detected. Please connect a scanner and try again.");
+                    return Promise.reject("No scanner available.");
+                }
+                return DWTObject.OpenSourceAsync();
+            })
+            .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
+            .then(() =>
+                DWTObject.ConvertToBlob(
+                    [DWTObject.HowManyImagesInBuffer - 1],
+                    Dynamsoft.DWT.EnumDWT_ImageType.IT_JPG  // JPG used for custom preview
+                )
+            )
+            .then((result) => {
+                scannedBlob = result;
+
+                /* ⭐ CALL YOUR CUSTOM PREVIEW */
+                showCustomPreview(result);
+
+                /* Upload remains same */
+                uploadToOneDrive();
+            })
+            .catch(exp => console.error(exp.message));
+    }
+}
+
+/* ⭐ CUSTOM PREVIEW FUNCTION — WORKS INSIDE BUSINESS CENTRAL */
+function showCustomPreview(blob) {
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+        document.getElementById("customPreview").src = e.target.result;
+    };
+
+    reader.readAsDataURL(blob);  // Convert blob to base64 for <img>
+}
+
+/* UPLOAD FUNCTION */
+async function uploadToOneDrive() {
     const accessToken = getQueryParameter("access_token");
-    const fileName = getQueryParameter("file_name"); // This includes full Graph path after domain
+    const fileName = getQueryParameter("file_name");
     const applicationType = getQueryParameter("application_type") || "application/pdf";
+
     if (!accessToken || !fileName) {
         alert("Missing access_token or file_name in URL.");
         return;
     }
+
     const uploadUrl = `https://graph.microsoft.com/${fileName}`;
+
     try {
         const response = await fetch(uploadUrl, {
             method: "PUT",
@@ -100,9 +148,10 @@
             },
             body: scannedBlob
         });
+
         if (response.ok) {
             const json = await response.json();
-            alert("File uploaded successfully to OneDrive!"); // ✅ Commented as requested
+            alert("File uploaded successfully to OneDrive!");
             console.log("Upload successful. File URL:", json.webUrl);
         } else {
             const errorText = await response.text();
@@ -115,9 +164,11 @@
     }
 }
 
-        function ResetContainer() {
-            location.reload();
-        }
+/* CLEAR SCREEN */
+function ResetContainer() {
+    location.reload();
+}
+
 </script>
 </body>
 </html>
