@@ -7,54 +7,69 @@
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
 
 <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #f4f4f4;
-            height: 100vh;
-        }
-        #input-container {
-            display: flex;
-            gap: 10px;
-            position: fixed;
-            top: 10px;
-            background-color: #f4f4f4;
-            padding: 10px;
-            z-index: 1000;
-        }
-        #scan-button, #cancel-button {
-            width: 200px;
-            height: 35px;
-            font-size: 16px;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #scan-button { background-color: #28a745; }
-        #scan-button:hover { background-color: #218838; }
-        #cancel-button { background-color: #dc3545; }
-        #cancel-button:hover { background-color: #c82333; }
+    body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background-color: #f4f4f4;
+        height: 100vh;
+    }
 
-        /* ❗ Dynamsoft preview container is still here but hidden */
-        #dwtcontrolContainer {
-            width: 400px;
-            height: 500px;
-            opacity: 0;           /* Completely invisible */
-            pointer-events: none; /* Disable clicking */
-            position: absolute;   /* Do not affect page layout */
-        }
+    #input-container {
+        display: flex;
+        gap: 10px;
+        position: fixed;
+        top: 10px;
+        background-color: #f4f4f4;
+        padding: 10px;
+        z-index: 1000;
+    }
 
-        /* ⭐ Custom Preview */
-        #customPreview {
-            width: 400px;
-            margin-top: 100px;
-            border: 2px solid #ccc;
-            background: white;
-            padding: 5px;
-        }
+    #scan-button, #cancel-button {
+        width: 200px;
+        height: 35px;
+        font-size: 16px;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    #scan-button {
+        background-color: #28a745;
+    }
+
+    #scan-button:hover {
+        background-color: #218838;
+    }
+
+    #cancel-button {
+        background-color: #dc3545;
+    }
+
+    #cancel-button:hover {
+        background-color: #c82333;
+    }
+
+    /* NO PREVIEW BOX ANYMORE */
+    #dwtcontrolContainer {
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+    }
+
+    #base64-output {
+        margin-top: 80px;
+        width: 90%;
+        padding: 15px;
+        background: white;
+        border: 2px solid #ccc;
+        border-radius: 8px;
+        word-wrap: break-word;
+        font-size: 14px;
+    }
 </style>
 </head>
 
@@ -65,92 +80,73 @@
     <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
 </div>
 
-<!-- 👇 Dynamsoft Viewer (loaded but hidden) -->
+<!-- Hidden container only needed for TWAIN initialization -->
 <div id="dwtcontrolContainer"></div>
 
-<!-- ⭐ Custom Preview (only this is visible) -->
-<h3 style="margin-top:100px;">Custom Preview</h3>
-<img id="customPreview" alt="No preview yet" />
+<!-- Base64 Will Appear Here -->
+<p id="base64-output">Base64 output will appear here after scanning…</p>
 
 <script type="text/javascript">
 
 let DWTObject = null;
 let scannedBlob = null;
 
-/* Initialize Dynamsoft (still required even though UI is hidden) */
 Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-    DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+    DWTObject = Dynamsoft.DWT.GetWebTwain("dwtcontrolContainer");
 });
 
-/* Read URL params */
+/* Read URL query parameter */
 function getQueryParameter(name) {
     const params = new URLSearchParams(window.location.search);
     return params.get(name) || "";
 }
 
-/* ⭐ SCAN FUNCTION */
+/* MAIN SCAN FUNCTION */
 function AcquireImage() {
-    if (DWTObject) {
-        DWTObject.GetSourceNamesAsync()
-            .then(sources => {
-                if (sources.length === 0) {
-                    alert("No scanner detected.");
-                    return Promise.reject("No scanner.");
-                }
-                return DWTObject.OpenSourceAsync();
-            })
-            .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
-            .then(() =>
-                /* Create JPG blob for custom preview */
-                DWTObject.ConvertToBlob(
-                    [DWTObject.HowManyImagesInBuffer - 1],
-                    Dynamsoft.DWT.EnumDWT_ImageType.IT_JPG
-                )
-            )
-            .then((jpgBlob) => {
-
-                scannedBlob = jpgBlob;
-
-                /* ⭐ SHOW CUSTOM PREVIEW FROM SCANNED DOCUMENT */
-                showCustomPreview(jpgBlob);
-
-                /* Convert to PDF before upload */
-                return convertToPDF();
-            })
-            .then(pdfBlob => {
-                scannedBlob = pdfBlob;
-                uploadToOneDrive();
-            })
-            .catch(exp => console.error(exp.message));
+    if (!DWTObject) {
+        alert("Scanner not initialized.");
+        return;
     }
+
+    DWTObject.GetSourceNamesAsync()
+        .then(sources => {
+            if (sources.length === 0) {
+                alert("No scanner detected.");
+                return Promise.reject();
+            }
+            return DWTObject.OpenSourceAsync();
+        })
+        .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
+        .then(() => DWTObject.ConvertToBlob(
+            [DWTObject.HowManyImagesInBuffer - 1],
+            Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
+        ))
+        .then(async (result) => {
+            scannedBlob = result;
+            const base64 = await convertBlobToBase64(scannedBlob);
+            document.getElementById("base64-output").innerText = base64;
+        })
+        .catch(err => console.error(err));
 }
 
-/* ⭐ CUSTOM PREVIEW (direct blob → image) */
-function showCustomPreview(blob) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        document.getElementById("customPreview").src = e.target.result;
-    };
-    reader.readAsDataURL(blob);
+/* Convert scanned blob to Base64 */
+function convertBlobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
 }
 
-/* Convert image to PDF blob */
-async function convertToPDF() {
-    return DWTObject.ConvertToBlob(
-        [DWTObject.HowManyImagesInBuffer - 1],
-        Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
-    );
-}
-
-/* Upload to OneDrive */
+/* Optional Upload Function */
 async function uploadToOneDrive() {
-
     const accessToken = getQueryParameter("access_token");
     const fileName = getQueryParameter("file_name");
     const applicationType = getQueryParameter("application_type") || "application/pdf";
 
     if (!accessToken || !fileName) {
-        alert("Missing access token or file name.");
+        alert("Missing access_token or file_name in URL.");
         return;
     }
 
@@ -167,24 +163,21 @@ async function uploadToOneDrive() {
         });
 
         if (response.ok) {
-            const json = await response.json();
-            alert("File uploaded successfully!");
-            console.log(json.webUrl);
+            alert("Upload successful!");
         } else {
-            const errTxt = await response.text();
-            alert("Upload failed:\n" + errTxt);
+            alert("Upload failed: " + await response.text());
         }
     } catch (err) {
-        alert("Unexpected error.");
         console.error(err);
+        alert("Upload error occurred");
     }
 }
 
-/* Reset the page */
 function ResetContainer() {
     location.reload();
 }
 
 </script>
+
 </body>
 </html>
