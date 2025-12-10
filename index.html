@@ -7,78 +7,88 @@
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        background-color: #f4f4f4;
-        height: 100vh;
-    }
-    #input-container {
-        display: flex;
-        gap: 10px;
-        position: fixed;
-        top: 10px;
-        background-color: #f4f4f4;
-        padding: 10px;
-        z-index: 1000;
-    }
-    #scan-button, #cancel-button {
-        width: 200px;
-        height: 35px;
-        font-size: 16px;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-    #scan-button { background-color: #28a745; }
-    #scan-button:hover { background-color: #218838; }
-    #cancel-button { background-color: #dc3545; }
-    #cancel-button:hover { background-color: #c82333; }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f4;
+            height: 100vh;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+            position: fixed;
+            top: 10px;
+            background-color: #f4f4f4;
+            padding: 10px;
+            z-index: 1000;
+        }
+        #scan-button, #cancel-button {
+            width: 200px;
+            height: 35px;
+            font-size: 16px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #scan-button { background-color: #28a745; }
+        #scan-button:hover { background-color: #218838; }
+        #cancel-button { background-color: #dc3545; }
+        #cancel-button:hover { background-color: #c82333; }
 
-    /* ★ Custom preview only */
-    #customPreview {
-        width: 400px;
-        height: auto;
-        margin-top: 100px;
-        border: 2px solid #ccc;
-        background: white;
-        padding: 5px;
-    }
+        /* ❗ Dynamsoft preview container is still here but hidden */
+        #dwtcontrolContainer {
+            width: 400px;
+            height: 500px;
+            opacity: 0;           /* Completely invisible */
+            pointer-events: none; /* Disable clicking */
+            position: absolute;   /* Do not affect page layout */
+        }
+
+        /* ⭐ Custom Preview */
+        #customPreview {
+            width: 400px;
+            margin-top: 100px;
+            border: 2px solid #ccc;
+            background: white;
+            padding: 5px;
+        }
 </style>
-
 </head>
+
 <body>
 
-<!-- Buttons -->
 <div id="input-container">
     <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
     <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
 </div>
 
-<!-- ★ Custom Preview -->
-<h3 style="margin-top:100px;">Scanned Document Preview</h3>
-<img id="customPreview" alt="No preview available yet" />
+<!-- 👇 Dynamsoft Viewer (loaded but hidden) -->
+<div id="dwtcontrolContainer"></div>
+
+<!-- ⭐ Custom Preview (only this is visible) -->
+<h3 style="margin-top:100px;">Custom Preview</h3>
+<img id="customPreview" alt="No preview yet" />
 
 <script type="text/javascript">
 
 let DWTObject = null;
 let scannedBlob = null;
 
-/* Initialize Dynamsoft WebTwain */
+/* Initialize Dynamsoft (still required even though UI is hidden) */
 Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-    DWTObject = Dynamsoft.DWT.GetWebTwain(null);  // no built-in preview container
+    DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
 });
 
-/* Get URL parameters */
+/* Read URL params */
 function getQueryParameter(name) {
     const params = new URLSearchParams(window.location.search);
     return params.get(name) || "";
 }
 
-/* ★ Scan document */
+/* ⭐ SCAN FUNCTION */
 function AcquireImage() {
     if (DWTObject) {
         DWTObject.GetSourceNamesAsync()
@@ -91,38 +101,40 @@ function AcquireImage() {
             })
             .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
             .then(() =>
+                /* Create JPG blob for custom preview */
                 DWTObject.ConvertToBlob(
                     [DWTObject.HowManyImagesInBuffer - 1],
                     Dynamsoft.DWT.EnumDWT_ImageType.IT_JPG
                 )
             )
-            .then(jpgBlob => {
+            .then((jpgBlob) => {
+
                 scannedBlob = jpgBlob;
 
-                /* ★ SHOW CUSTOM PREVIEW (JPG) */
+                /* ⭐ SHOW CUSTOM PREVIEW FROM SCANNED DOCUMENT */
                 showCustomPreview(jpgBlob);
 
-                /* Convert to PDF for upload */
+                /* Convert to PDF before upload */
                 return convertToPDF();
             })
             .then(pdfBlob => {
-                scannedBlob = pdfBlob;  
+                scannedBlob = pdfBlob;
                 uploadToOneDrive();
             })
-            .catch(err => console.error(err));
+            .catch(exp => console.error(exp.message));
     }
 }
 
-/* ★ Display scanned JPG preview */
+/* ⭐ CUSTOM PREVIEW (direct blob → image) */
 function showCustomPreview(blob) {
     const reader = new FileReader();
-    reader.onload = e => {
+    reader.onload = function (e) {
         document.getElementById("customPreview").src = e.target.result;
     };
     reader.readAsDataURL(blob);
 }
 
-/* Convert scanned image to PDF */
+/* Convert image to PDF blob */
 async function convertToPDF() {
     return DWTObject.ConvertToBlob(
         [DWTObject.HowManyImagesInBuffer - 1],
@@ -130,14 +142,15 @@ async function convertToPDF() {
     );
 }
 
-/* Upload PDF to OneDrive */
+/* Upload to OneDrive */
 async function uploadToOneDrive() {
+
     const accessToken = getQueryParameter("access_token");
     const fileName = getQueryParameter("file_name");
     const applicationType = getQueryParameter("application_type") || "application/pdf";
 
     if (!accessToken || !fileName) {
-        alert("Missing access_token or file_name.");
+        alert("Missing access token or file name.");
         return;
     }
 
@@ -158,21 +171,20 @@ async function uploadToOneDrive() {
             alert("File uploaded successfully!");
             console.log(json.webUrl);
         } else {
-            const errorText = await response.text();
-            alert("Upload failed:\n" + errorText);
+            const errTxt = await response.text();
+            alert("Upload failed:\n" + errTxt);
         }
     } catch (err) {
-        alert("Error uploading file.");
+        alert("Unexpected error.");
         console.error(err);
     }
 }
 
-/* Reset */
+/* Reset the page */
 function ResetContainer() {
     location.reload();
 }
 
 </script>
-
 </body>
 </html>
