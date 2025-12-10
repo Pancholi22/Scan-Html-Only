@@ -38,10 +38,9 @@
     #cancel-button { background-color: #dc3545; }
     #cancel-button:hover { background-color: #c82333; }
 
-    /* ★ Your custom preview */
+    /* Custom preview only */
     #customPreview {
         width: 400px;
-        height: auto;
         margin-top: 80px;
         border: 2px solid #ccc;
         background: white;
@@ -58,28 +57,27 @@
     <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
 </div>
 
-<!-- ★ Custom preview only -->
+<!-- ★ ONLY custom preview -->
 <h3 style="margin-top:80px;">Scanned Document Preview</h3>
-<img id="customPreview" alt="No preview available yet" />
+<img id="customPreview" alt="Your scanned document will appear here" />
 
 <script type="text/javascript">
 
 let DWTObject = null;
-let scannedBlob = null;
+let pdfBlob = null;
 
-/* When Dynamsoft is ready */
+/* ★ Load WebTWAIN in HEADLESS mode (NO PREVIEW CONTAINER) */
 Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-    // No container needed because we removed Dynamsoft preview
-    DWTObject = Dynamsoft.DWT.GetWebTwain(null);
+    DWTObject = Dynamsoft.DWT.GetWebTwain(null); // important: null = no viewer
 });
 
-/* Get URL parameters */
+/* Read URL parameters */
 function getQueryParameter(name) {
     const params = new URLSearchParams(window.location.search);
     return params.get(name) || "";
 }
 
-/* ★ SCAN FUNCTION (Dynamsoft) */
+/* ★ SCAN FUNCTION */
 function AcquireImage() {
     if (DWTObject) {
         DWTObject.GetSourceNamesAsync()
@@ -91,56 +89,43 @@ function AcquireImage() {
                 return DWTObject.OpenSourceAsync();
             })
             .then(() => DWTObject.AcquireImageAsync({ IfCloseSourceAfterAcquire: true }))
-            .then(() =>
-                // Convert scanned page to JPG for preview
+            .then(() => 
+                /* Convert for preview (JPG) */
                 DWTObject.ConvertToBlob(
                     [DWTObject.HowManyImagesInBuffer - 1],
                     Dynamsoft.DWT.EnumDWT_ImageType.IT_JPG
                 )
             )
-            .then((jpgBlob) => {
+            .then(jpgBlob => {
+                showCustomPreview(jpgBlob);  // show preview
 
-                scannedBlob = jpgBlob;
-
-                /* ★ SHOW CUSTOM PREVIEW */
-                showCustomPreview(jpgBlob);
-
-                /* Upload PDF version */
-                return convertToPDF();
+                /* Convert PDF for upload */
+                return DWTObject.ConvertToBlob(
+                    [DWTObject.HowManyImagesInBuffer - 1],
+                    Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
+                );
             })
-            .then(pdfBlob => {
-                scannedBlob = pdfBlob;
-                uploadToOneDrive();  
+            .then(pdf => {
+                pdfBlob = pdf;
+                uploadToOneDrive();
             })
             .catch(exp => console.error(exp.message));
     }
 }
 
-/* ★ CUSTOM PREVIEW — shows JPG version */
+/* ★ CUSTOM PREVIEW FUNCTION */
 function showCustomPreview(blob) {
     const reader = new FileReader();
-
     reader.onload = function(e) {
         document.getElementById("customPreview").src = e.target.result;
     };
-
     reader.readAsDataURL(blob);
-}
-
-/* Convert scanned image(s) to PDF for upload */
-async function convertToPDF() {
-    return DWTObject.ConvertToBlob(
-        [DWTObject.HowManyImagesInBuffer - 1],
-        Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF
-    );
 }
 
 /* ★ UPLOAD FUNCTION */
 async function uploadToOneDrive() {
-
     const accessToken = getQueryParameter("access_token");
     const fileName = getQueryParameter("file_name");
-    const applicationType = getQueryParameter("application_type") || "application/pdf";
 
     if (!accessToken || !fileName) {
         alert("Missing access_token or file_name in URL.");
@@ -154,19 +139,18 @@ async function uploadToOneDrive() {
             method: "PUT",
             headers: {
                 "Authorization": `Bearer ${accessToken}`,
-                "Content-Type": applicationType
+                "Content-Type": "application/pdf"
             },
-            body: scannedBlob  // PDF
+            body: pdfBlob
         });
 
         if (response.ok) {
             const json = await response.json();
-            alert("File uploaded successfully to OneDrive!");
-            console.log("Upload successful:", json.webUrl);
+            alert("File uploaded successfully!");
         } else {
-            const errorText = await response.text();
-            alert("Upload failed:\n" + errorText);
+            alert("Upload failed:\n" + await response.text());
         }
+
     } catch (err) {
         alert("An unexpected error occurred.");
         console.error(err);
