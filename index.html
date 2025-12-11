@@ -1,148 +1,262 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf-8" />
 <title>KP Scan & Upload Document</title>
+
+<!-- Dynamsoft scripts (ensure these files are available under Resources/) -->
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
 <script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
+
 <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #f4f4f4;
-            height: 100vh;
-        }
-        #input-container {
-            display: flex;
-            gap: 10px;
-            position: fixed;
-            top: 10px;
-            background-color: #f4f4f4;
-            padding: 10px;
-            z-index: 1000;
-        }
-        #scan-button, #cancel-button {
-            width: 200px;
-            height: 35px;
-            font-size: 16px;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        #scan-button { background-color: #28a745; }
-        #scan-button:hover { background-color: #218838; }
-        #cancel-button { background-color: #dc3545; }
-        #cancel-button:hover { background-color: #c82333; }
-        #dwtcontrolContainer {
-            width: 400px;
-            height: 500px;
-            background-color: white;
-            border: 2px solid #ccc;
-            margin-top: 60px;
-        }
+    body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background-color: #f4f4f4;
+        min-height: 100vh;
+        margin: 0;
+        padding-bottom: 40px;
+    }
+    #input-container {
+        display: flex;
+        gap: 10px;
+        position: fixed;
+        top: 10px;
+        background-color: #f4f4f4;
+        padding: 10px;
+        z-index: 1000;
+    }
+    .btn {
+        width: 200px;
+        height: 36px;
+        font-size: 15px;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    #scan-button { background-color: #28a745; }
+    #scan-button:hover { background-color: #218838; }
+    #cancel-button { background-color: #dc3545; }
+    #cancel-button:hover { background-color: #c82333; }
+    #send-base64-button { background-color: #007bff; }
+    #send-base64-button:hover { background-color: #0069d9; }
+
+    #dwtcontrolContainer {
+        width: 820px;
+        height: 600px;
+        background-color: white;
+        border: 2px solid #ccc;
+        margin-top: 80px;
+        box-sizing: border-box;
+    }
+
+    #status {
+        margin-top: 12px;
+        font-size: 13px;
+        color: #333;
+    }
 </style>
 </head>
 <body>
+
 <div id="input-container">
-<input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
-<input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
+    <input type="button" id="scan-button" class="btn" value="Scan" />
+    <input type="button" id="cancel-button" class="btn" value="Clear" />
+    <input type="button" id="send-base64-button" class="btn" value="Send Base64 to Business Central" />
 </div>
+
 <div id="dwtcontrolContainer"></div>
+<div id="status">Status: Idle</div>
+
 <script type="text/javascript">
-        let DWTObject = null;
-        let scannedBlob = null;
-        Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-            DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
-        });
-        function getQueryParameter(name) {
-            const params = new URLSearchParams(window.location.search);
-            return params.get(name) || "";
+    // Globals
+    let DWTObject = null;
+    let scannedBlob = null; // PDF Blob after conversion
+
+    // Dynamsoft ready
+    Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
+        DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+        document.getElementById('status').innerText = 'Status: Scanner control ready';
+    });
+
+    // Helper: get query param (for your OneDrive upload usage)
+    function getQueryParameter(name) {
+        const params = new URLSearchParams(window.location.search);
+        return params.get(name) || "";
+    }
+
+    // Acquire image(s), convert entire buffer to single PDF blob
+    async function AcquireImage() {
+        if (!DWTObject) {
+            alert("Scanner control not initialized yet.");
+            return;
         }
- 
-        // Acquire image(s) and append to the buffer so multi-page scans are retained.
-        function AcquireImage() {
-            if (DWTObject) {
-                DWTObject.GetSourceNamesAsync()
-                    .then(sources => {
-                        if (sources.length === 0) {
-                            alert("No scanner detected. Please connect a scanner and try again.");
-                            return Promise.reject("No scanner available.");
-                        }
-                        return DWTObject.OpenSourceAsync();
-                    })
-                    .then(() => {
-                        // IMPORTANT: set IfAppendImage: true so multiple acquisitions append pages
-                        return DWTObject.AcquireImageAsync({
-                            IfAppendImage: true,
-                            IfCloseSourceAfterAcquire: true,
-                            // optional settings:
-                            // IfFeederEnabled: true,
-                            // Resolution: 200,
-                            // PixelType: 2
-                        });
-                    })
-                    .then(() => {
-                        // Convert ALL images in the buffer (not just the last one) into a single PDF blob.
-                        const count = DWTObject.HowManyImagesInBuffer || 0;
-                        if (count === 0) {
-                            console.warn("No images in buffer after acquire.");
-                            return Promise.reject("No images in buffer.");
-                        }
-                        // build array of indices [0,1,2,...,count-1]
-                        const allIndices = Array.from({ length: count }, (_, i) => i);
-                        return DWTObject.ConvertToBlob(allIndices, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
-                    })
-                    .then((result) => {
-                        scannedBlob = result;
-                        uploadToOneDrive(); // Automatically upload after scan (unchanged behavior)
-                    })
-                    .catch(exp => {
-                        // keep the original minimal error handling; log message if available
-                        console.error(exp && exp.message ? exp.message : exp);
-                    });
+        try {
+            document.getElementById('status').innerText = 'Status: Opening source...';
+            const sources = await DWTObject.GetSourceNamesAsync();
+            if (!sources || sources.length === 0) {
+                alert("No scanner detected. Please connect a scanner and try again.");
+                document.getElementById('status').innerText = 'Status: No scanner';
+                return;
             }
+            await DWTObject.OpenSourceAsync();
+            document.getElementById('status').innerText = 'Status: Acquiring...';
+
+            // Acquire and append images (multi-page)
+            await DWTObject.AcquireImageAsync({
+                IfAppendImage: true,
+                IfCloseSourceAfterAcquire: true
+            });
+
+            const count = DWTObject.HowManyImagesInBuffer || 0;
+            if (count === 0) {
+                alert("No images in buffer after acquire.");
+                document.getElementById('status').innerText = 'Status: No images in buffer';
+                return;
+            }
+
+            // Convert all pages into a single PDF Blob
+            const allIndices = Array.from({ length: count }, (_, i) => i);
+            const resultBlob = await DWTObject.ConvertToBlob(allIndices, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
+
+            scannedBlob = resultBlob; // keep for send/upload/preview
+            document.getElementById('status').innerText = 'Status: Scan complete — PDF ready';
+            console.log('scannedBlob', scannedBlob);
+
+        } catch (err) {
+            console.error(err);
+            alert('Scan failed: ' + (err && err.message ? err.message : err));
+            document.getElementById('status').innerText = 'Status: Error during scan';
         }
- 
-        async function uploadToOneDrive() {
-    const accessToken = getQueryParameter("access_token");
-    const fileName = getQueryParameter("file_name"); // This includes full Graph path after domain
-    const applicationType = getQueryParameter("application_type") || "application/pdf";
-    if (!accessToken || !fileName) {
-        alert("Missing access_token or file_name in URL.");
-        return;
     }
-    const uploadUrl = `https://graph.microsoft.com/${fileName}`;
-    try {
-        const response = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: {
-                "Authorization": `Bearer ${accessToken}`,
-                "Content-Type": applicationType
-            },
-            body: scannedBlob
-        });
-        if (response.ok) {
-            const json = await response.json();
-            alert("File uploaded successfully to OneDrive!"); // ✅ Commented as requested
-            console.log("Upload successful. File URL:", json.webUrl);
-            // Optionally clear buffer after successful upload:
-            try { if (DWTObject) DWTObject.RemoveAllImages(); } catch(e) { console.warn(e); }
-        } else {
-            const errorText = await response.text();
-            alert("Upload failed:\n" + errorText);
-            console.error("Upload failed:", errorText);
-        }
-    } catch (err) {
-        alert("An unexpected error occurred.");
-        console.error("Upload error:", err);
-    }
-}
- 
-        function ResetContainer() {
+
+    // Reset / clear buffer
+    function ResetContainer() {
+        try {
+            if (DWTObject) DWTObject.RemoveAllImages();
+            scannedBlob = null;
+            document.getElementById('status').innerText = 'Status: Cleared';
+        } catch (e) {
+            console.warn(e);
             location.reload();
         }
+    }
+
+    // Convert blob -> dataURL (base64)
+    function convertBlobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            if (!blob) {
+                reject('No blob provided');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result); // data:application/pdf;base64,.....
+            reader.onerror = (e) => reject(e);
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    // Send base64 payload to BC add-in (uses opener)
+    async function sendBase64ToBC() {
+        if (!scannedBlob) {
+            alert("No scanned document available. Please scan first.");
+            return;
+        }
+        if (!window.opener) {
+            alert("Cannot find the parent add-in window (window.opener is null). Ensure this page was opened from Business Central add-in.");
+            return;
+        }
+
+        try {
+            document.getElementById('status').innerText = 'Status: Converting PDF to Base64...';
+            const base64 = await convertBlobToBase64(scannedBlob); // data:application/pdf;base64,...
+
+            const message = {
+                type: "ScanCompleted",
+                dataType: "base64",
+                filename: "scan.pdf",
+                content: base64
+            };
+
+            // Send message to opener. Use same origin to be strict: window.location.origin
+            // If your BC add-in and this page are on the same exact origin this will match.
+            const targetOrigin = window.location.origin || '*';
+            try {
+                window.opener.postMessage(message, targetOrigin);
+                document.getElementById('status').innerText = 'Status: Base64 sent to parent add-in';
+                // optionally show quick note
+                // alert('Base64 sent to Business Central (length: ' + base64.length + ')');
+            } catch (postErr) {
+                console.error('postMessage error', postErr);
+                // fallback to wildcard if strict origin fails
+                try {
+                    window.opener.postMessage(message, '*');
+                    document.getElementById('status').innerText = 'Status: Base64 sent (fallback *)';
+                } catch (err2) {
+                    throw postErr;
+                }
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Failed to convert or send base64: " + err);
+            document.getElementById('status').innerText = 'Status: Failed to send base64';
+        }
+    }
+
+    // Existing OneDrive upload (keeps your previous behavior)
+    async function uploadToOneDrive() {
+        const accessToken = getQueryParameter("access_token");
+        const fileName = getQueryParameter("file_name"); // should be path like me/drive/root:/folder/filename.pdf:/content or drive/items/{id}/content
+        const applicationType = getQueryParameter("application_type") || "application/pdf";
+        if (!accessToken || !fileName) {
+            alert("Missing access_token or file_name in URL.");
+            return;
+        }
+        if (!scannedBlob) {
+            alert("No scanned blob available for upload. Please scan first.");
+            return;
+        }
+
+        const uploadUrl = `https://graph.microsoft.com/${fileName}`;
+        try {
+            document.getElementById('status').innerText = 'Status: Uploading to OneDrive...';
+            const response = await fetch(uploadUrl, {
+                method: "PUT",
+                headers: {
+                    "Authorization": `Bearer ${accessToken}`,
+                    "Content-Type": applicationType
+                },
+                body: scannedBlob
+            });
+            if (response.ok) {
+                const json = await response.json();
+                console.log("Upload successful. File URL:", json.webUrl);
+                document.getElementById('status').innerText = 'Status: Uploaded to OneDrive';
+                try { if (DWTObject) DWTObject.RemoveAllImages(); } catch(e) { console.warn(e); }
+            } else {
+                const errorText = await response.text();
+                alert("Upload failed:\n" + errorText);
+                console.error("Upload failed:", errorText);
+                document.getElementById('status').innerText = 'Status: Upload failed';
+            }
+        } catch (err) {
+            alert("An unexpected error occurred during upload.");
+            console.error("Upload error:", err);
+            document.getElementById('status').innerText = 'Status: Upload error';
+        }
+    }
+
+    // Hook up UI
+    document.getElementById('scan-button').addEventListener('click', AcquireImage);
+    document.getElementById('cancel-button').addEventListener('click', ResetContainer);
+    document.getElementById('send-base64-button').addEventListener('click', sendBase64ToBC);
+
+    // Optional: auto-send to BC after scan (uncomment if you want auto-send)
+    // After you set scannedBlob in AcquireImage, call sendBase64ToBC() if desired.
+
 </script>
 </body>
 </html>
