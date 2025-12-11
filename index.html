@@ -96,225 +96,120 @@
 <div id="dwtcontrolContainer"></div>
  
 <script>
-
-// 🚀 STEP 1 — Enable Dynamsoft Local Service Mode (no Chrome popup)
-
-Dynamsoft.DWT.ResourcesPath = "Resources";
-
-Dynamsoft.DWT.ProductKey = "f0068ZQAAABvwZ61KmatKuSFLfk7lw/a7S1V+NVK1A18jG8OBy6/5kUgKdwBYAw3zmePXWq/Eidf5SfyS4HRCUsDmhb7H02M=";
-
-Dynamsoft.DWT.UseLocalService = true;
-
-Dynamsoft.DWT.IfDetectDirectScanner = false;
-
-Dynamsoft.DWT.UseCameraViaHTTP = false;
-
-Dynamsoft.DWT.IfDisableDefaultSettings = true;
- 
-// ---------------------------------------------------------
-
-let DWTObject = null;
-
-let scannedBlob = null;
- 
-// Init WebTWAIN
-
-Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
-
-    DWTObject = Dynamsoft.DWT.GetWebTwain("dwtcontrolContainer");
-
-});
- 
-// Helper to read URL params from BC
-
+// (keep your existing helpers like getQueryParameter and CALLBACK_ORIGIN here)
 function getQueryParameter(name) {
-
     const params = new URLSearchParams(window.location.search);
-
     return params.get(name) || "";
-
 }
- 
-// Optional: allow passing a callback origin for security (recommended).
-
-// If not provided, code falls back to '*' (use only for testing).
-
 const CALLBACK_ORIGIN = getQueryParameter("callback_origin") || "*";
+const RETURN_MODE = getQueryParameter("return_mode") || "onedrive"; // 'base64' or 'onedrive'
+const fileNameParam = getQueryParameter("file_name") || "scan.pdf";
  
-// 🚀 STEP 2 — SCAN + preview
-
-function AcquireImage() {
-
-    if (!DWTObject) return;
- 
-    DWTObject.GetSourceNamesAsync()
-
-        .then(sources => {
-
-            if (sources.length === 0) {
-
-                alert("No scanner detected.");
-
-                return Promise.reject();
-
-            }
-
-            return DWTObject.OpenSourceAsync();
-
-        })
-
-        .then(() => 
-
-            DWTObject.AcquireImageAsync({
-
-                IfCloseSourceAfterAcquire: true,
-
-                IfAppendImage: true
-
-            })
-
-        )
-
-        .catch(err => console.error(err));
-
+// --- blob -> dataURL helper
+function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => { reader.abort(); reject(new Error('Failed to read blob')); };
+        reader.onload = () => resolve(reader.result); // "data:application/pdf;base64,...."
+        reader.readAsDataURL(blob);
+    });
 }
  
-// 🚀 STEP 3 — Upload scanned PDF to OneDrive AND return BC callback
-
-async function uploadToOneDrive() {
- 
-    const accessToken = getQueryParameter("access_token");
-
-    const fileName = getQueryParameter("file_name");
-
-    const appType = getQueryParameter("application_type") || "application/pdf";
- 
-    if (!accessToken || !fileName) {
-
-        alert("Missing access_token or file_name");
-
-        return;
-
-    }
- 
-    const count = DWTObject.HowManyImagesInBuffer;
-
-    if (count === 0) {
-
-        alert("Nothing scanned!");
-
-        return;
-
-    }
- 
-    // Convert all pages → single PDF Blob
-
-    const allIdx = [...Array(count).keys()];
-
-    scannedBlob = await DWTObject.ConvertToBlob(allIdx, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
- 
-    // NOTE: adapt endpoint according to how you want to upload to OneDrive / Graph API
-
-    // This example expects an upload URL such as: /me/drive/root:/path/filename:/content
-
-    const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileName)}:/content`;
- 
-    const response = await fetch(uploadUrl, {
-
-        method: "PUT",
-
-        headers: {
-
-            "Authorization": `Bearer ${accessToken}`,
-
-            "Content-Type": appType
-
-        },
-
-        body: scannedBlob
-
-    });
- 
-    if (response.ok) {
-
-        const json = await response.json();
-
-        alert("Upload success!");
- 
-        // -----------------------------
-
-        // 🚀 SEND FILE URL BACK TO BUSINESS CENTRAL
-
-        // Use message shape that BC's control add-in expects:
-
-        // { type: "ScanCompleted", url: "<file-url>" }
-
-        // -----------------------------
- 
-        const resultUrl = json.webUrl || json["@microsoft.graph.downloadUrl"] || json.id || null;
- 
-        // Prefer the webUrl if returned; otherwise send whatever meaningful locator you have.
-
+// --- send base64 back to opener (and close)
+async function sendBase64ToOpener(pdfBlob, suggestedFileName) {
+    try {
+        const dataUrl = await blobToDataURL(pdfBlob); // data:application/pdf;base64,...
         const messagePayload = {
-
-            type: "ScanCompleted",
-
-            url: resultUrl || ("urn:onedrive:" + (json.id || fileName))
-
+            type: 'ScanCompleted',
+            dataType: 'base64',
+            filename: suggestedFileName || 'scan.pdf',
+            content: dataUrl
         };
  
         if (window.opener && !window.opener.closed) {
-
+            const targetOrigin = CALLBACK_ORIGIN === "*" ? "*" : CALLBACK_ORIGIN;
             try {
-
-                // in production, replace CALLBACK_ORIGIN with a concrete BC origin (recommended)
-
-                window.opener.postMessage(messagePayload, CALLBACK_ORIGIN);
-
+                window.opener.postMessage(messagePayload, targetOrigin);
             } catch (err) {
-
-                // Fallback: try '*' if specific origin fails (for testing only)
-
-                try { window.opener.postMessage(messagePayload, "*"); } catch (e) { console.error(e); }
-
+                // fallback for testing
+                window.opener.postMessage(messagePayload, '*');
             }
-
+            // optionally close scanner tab
+            try { window.close(); } catch (e) {}
+        } else {
+            // fallback: show link / data for manual copy
+            console.warn('Opener not available — show manual download / copy.');
+            // e.g., show dataUrl in the page or create a download link
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = suggestedFileName || 'scan.pdf';
+            a.text = 'Download scanned PDF';
+            document.body.appendChild(a);
+        }
+    } catch (err) {
+        console.error('Failed to convert/send base64', err);
+    }
+}
+ 
+// --- Existing Dynamsoft flow: when all images transferred, create PDF blob
+async function uploadOrReturnBase64() {
+    try {
+        const count = DWTObject.HowManyImagesInBuffer;
+        if (count === 0) {
+            alert("Nothing scanned!");
+            return;
         }
  
-        try { DWTObject.RemoveAllImages(); } catch(e){}
+        // convert scanned images to single PDF blob (you already do this)
+        const allIdx = [...Array(count).keys()];
+        const scannedBlob = await DWTObject.ConvertToBlob(allIdx, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
  
-        // Close the tab after sending the message (optional)
-
-        try { window.close(); } catch(e) { /* window.close may be blocked in some contexts */ }
+        if (RETURN_MODE === 'base64') {
+            // send base64 back to BC
+            await sendBase64ToOpener(scannedBlob, fileNameParam);
+            // clear buffer
+            try { DWTObject.RemoveAllImages(); } catch(e){}
+            return;
+        }
  
-    } 
-
-    else {
-
-        const msg = await response.text();
-
-        alert("Upload failed:\n" + msg);
-
+        // else: existing OneDrive upload flow (keeps your original code)
+        const accessToken = getQueryParameter("access_token");
+        const appType = getQueryParameter("application_type") || "application/pdf";
+        if (!accessToken) {
+            alert("Missing access_token for OneDrive upload");
+            return;
+        }
+ 
+        const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileNameParam)}:/content`;
+        const response = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "Content-Type": appType
+            },
+            body: scannedBlob
+        });
+ 
+        if (response.ok) {
+            const json = await response.json();
+            const resultUrl = json.webUrl || json["@microsoft.graph.downloadUrl"] || json.id || null;
+            const msg = { type: "ScanCompleted", url: resultUrl || ("urn:onedrive:" + (json.id || fileNameParam)) };
+            if (window.opener && !window.opener.closed) {
+                try { window.opener.postMessage(msg, CALLBACK_ORIGIN); } catch(e) { window.opener.postMessage(msg, '*'); }
+            }
+            try { DWTObject.RemoveAllImages(); } catch(e){}
+            try { window.close(); } catch(e){}
+        } else {
+            const txt = await response.text();
+            alert("Upload failed:\n" + txt);
+        }
+    } catch (err) {
+        console.error(err);
     }
-
 }
  
-// Auto-upload after scan completes: Dynamsoft calls OnPostAllTransfers when the transfer finishes
-
-Dynamsoft.DWT.RegisterEvent("OnPostAllTransfers", uploadToOneDrive);
- 
-// Clear preview
-
-function ResetContainer() {
-
-    if (DWTObject) DWTObject.RemoveAllImages();
-
-}
- 
-// Optional: a manual button to trigger upload (if you want user confirmation instead of immediate upload)
-
-// document.getElementById('upload-button')?.addEventListener('click', uploadToOneDrive);
- 
+// register Dynamsoft event to call our unified handler
+Dynamsoft.DWT.RegisterEvent("OnPostAllTransfers", uploadOrReturnBase64);
 </script>
 </body>
 </html>
