@@ -2,172 +2,321 @@
 <html>
 <head>
 <title>KP Scan & Upload Document</title>
-
+ 
 <!-- Dynamsoft scripts -->
 <script src="Resources/dynamsoft.webtwain.initiate.js"></script>
 <script src="Resources/dynamsoft.webtwain.config.js"></script>
 <script src="Resources/dynamsoft.service.config.js"></script>
-
+ 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        background-color: #f4f4f4;
-        height: 100vh;
-    }
-    #input-container {
-        display: flex;
-        gap: 10px;
-        position: fixed;
-        top: 10px;
-        background-color: #f4f4f4;
-        padding: 10px;
-        z-index: 1000;
-    }
-    #scan-button, #cancel-button {
-        width: 200px;
-        height: 35px;
-        font-size: 16px;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-    #scan-button { background-color: #28a745; }
-    #scan-button:hover { background-color: #218838; }
-    #cancel-button { background-color: #dc3545; }
-    #cancel-button:hover { background-color: #c82333; }
 
+    body {
+
+        font-family: Arial, sans-serif;
+
+        display: flex;
+
+        flex-direction: column;
+
+        align-items: center;
+
+        background-color: #f4f4f4;
+
+        height: 100vh;
+
+    }
+
+    #input-container {
+
+        display: flex;
+
+        gap: 10px;
+
+        position: fixed;
+
+        top: 10px;
+
+        background-color: #f4f4f4;
+
+        padding: 10px;
+
+        z-index: 1000;
+
+    }
+
+    #scan-button, #cancel-button {
+
+        width: 200px;
+
+        height: 35px;
+
+        font-size: 16px;
+
+        color: white;
+
+        border: none;
+
+        border-radius: 5px;
+
+        cursor: pointer;
+
+    }
+
+    #scan-button { background-color: #28a745; }
+
+    #scan-button:hover { background-color: #218838; }
+
+    #cancel-button { background-color: #dc3545; }
+
+    #cancel-button:hover { background-color: #c82333; }
+ 
     #dwtcontrolContainer {
+
         width: 500px;
+
         height: 600px;
+
         background-color: white;
+
         border: 2px solid #ccc;
+
         margin-top: 60px;
+
     }
 </style>
 </head>
-
+ 
 <body>
-
+ 
 <div id="input-container">
-    <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
-    <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
+<input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
+<input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
 </div>
-
+ 
 <div id="dwtcontrolContainer"></div>
-
+ 
 <script>
+
 // 🚀 STEP 1 — Enable Dynamsoft Local Service Mode (no Chrome popup)
+
 Dynamsoft.DWT.ResourcesPath = "Resources";
+
 Dynamsoft.DWT.ProductKey = "f0068ZQAAABvwZ61KmatKuSFLfk7lw/a7S1V+NVK1A18jG8OBy6/5kUgKdwBYAw3zmePXWq/Eidf5SfyS4HRCUsDmhb7H02M=";
 
 Dynamsoft.DWT.UseLocalService = true;
+
 Dynamsoft.DWT.IfDetectDirectScanner = false;
+
 Dynamsoft.DWT.UseCameraViaHTTP = false;
+
 Dynamsoft.DWT.IfDisableDefaultSettings = true;
-
+ 
 // ---------------------------------------------------------
+
 let DWTObject = null;
+
 let scannedBlob = null;
-
+ 
 // Init WebTWAIN
+
 Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
+
     DWTObject = Dynamsoft.DWT.GetWebTwain("dwtcontrolContainer");
+
 });
-
+ 
 // Helper to read URL params from BC
+
 function getQueryParameter(name) {
+
     const params = new URLSearchParams(window.location.search);
+
     return params.get(name) || "";
-}
 
+}
+ 
+// Optional: allow passing a callback origin for security (recommended).
+
+// If not provided, code falls back to '*' (use only for testing).
+
+const CALLBACK_ORIGIN = getQueryParameter("callback_origin") || "*";
+ 
 // 🚀 STEP 2 — SCAN + preview
+
 function AcquireImage() {
+
     if (!DWTObject) return;
-
+ 
     DWTObject.GetSourceNamesAsync()
+
         .then(sources => {
+
             if (sources.length === 0) {
+
                 alert("No scanner detected.");
+
                 return Promise.reject();
+
             }
+
             return DWTObject.OpenSourceAsync();
+
         })
+
         .then(() => 
+
             DWTObject.AcquireImageAsync({
+
                 IfCloseSourceAfterAcquire: true,
+
                 IfAppendImage: true
+
             })
+
         )
+
         .catch(err => console.error(err));
+
 }
-
+ 
 // 🚀 STEP 3 — Upload scanned PDF to OneDrive AND return BC callback
+
 async function uploadToOneDrive() {
-
+ 
     const accessToken = getQueryParameter("access_token");
+
     const fileName = getQueryParameter("file_name");
+
     const appType = getQueryParameter("application_type") || "application/pdf";
-
+ 
     if (!accessToken || !fileName) {
+
         alert("Missing access_token or file_name");
-        return;
-    }
 
+        return;
+
+    }
+ 
     const count = DWTObject.HowManyImagesInBuffer;
+
     if (count === 0) {
+
         alert("Nothing scanned!");
+
         return;
+
     }
-
+ 
     // Convert all pages → single PDF Blob
+
     const allIdx = [...Array(count).keys()];
+
     scannedBlob = await DWTObject.ConvertToBlob(allIdx, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
+ 
+    // NOTE: adapt endpoint according to how you want to upload to OneDrive / Graph API
 
-    const uploadUrl = `https://graph.microsoft.com/${fileName}`;
+    // This example expects an upload URL such as: /me/drive/root:/path/filename:/content
 
+    const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileName)}:/content`;
+ 
     const response = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": appType
-        },
-        body: scannedBlob
-    });
 
+        method: "PUT",
+
+        headers: {
+
+            "Authorization": `Bearer ${accessToken}`,
+
+            "Content-Type": appType
+
+        },
+
+        body: scannedBlob
+
+    });
+ 
     if (response.ok) {
+
         const json = await response.json();
+
         alert("Upload success!");
+ 
+        // -----------------------------
 
         // 🚀 SEND FILE URL BACK TO BUSINESS CENTRAL
-        if (window.opener) {
-            window.opener.postMessage(
-                { uploadedUrl: json.webUrl },
-                "*"   // or your BC domain: "https://your-bc-domain.com"
-            );
+
+        // Use message shape that BC's control add-in expects:
+
+        // { type: "ScanCompleted", url: "<file-url>" }
+
+        // -----------------------------
+ 
+        const resultUrl = json.webUrl || json["@microsoft.graph.downloadUrl"] || json.id || null;
+ 
+        // Prefer the webUrl if returned; otherwise send whatever meaningful locator you have.
+
+        const messagePayload = {
+
+            type: "ScanCompleted",
+
+            url: resultUrl || ("urn:onedrive:" + (json.id || fileName))
+
+        };
+ 
+        if (window.opener && !window.opener.closed) {
+
+            try {
+
+                // in production, replace CALLBACK_ORIGIN with a concrete BC origin (recommended)
+
+                window.opener.postMessage(messagePayload, CALLBACK_ORIGIN);
+
+            } catch (err) {
+
+                // Fallback: try '*' if specific origin fails (for testing only)
+
+                try { window.opener.postMessage(messagePayload, "*"); } catch (e) { console.error(e); }
+
+            }
+
         }
-
+ 
         try { DWTObject.RemoveAllImages(); } catch(e){}
+ 
+        // Close the tab after sending the message (optional)
 
-        window.close(); // auto-close tab
+        try { window.close(); } catch(e) { /* window.close may be blocked in some contexts */ }
+ 
     } 
+
     else {
+
         const msg = await response.text();
+
         alert("Upload failed:\n" + msg);
+
     }
-}
 
-// Auto-upload after scan
+}
+ 
+// Auto-upload after scan completes: Dynamsoft calls OnPostAllTransfers when the transfer finishes
+
 Dynamsoft.DWT.RegisterEvent("OnPostAllTransfers", uploadToOneDrive);
-
+ 
 // Clear preview
-function ResetContainer() {
-    if (DWTObject) DWTObject.RemoveAllImages();
-}
 
+function ResetContainer() {
+
+    if (DWTObject) DWTObject.RemoveAllImages();
+
+}
+ 
+// Optional: a manual button to trigger upload (if you want user confirmation instead of immediate upload)
+
+// document.getElementById('upload-button')?.addEventListener('click', uploadToOneDrive);
+ 
 </script>
 </body>
 </html>
+
+ 
