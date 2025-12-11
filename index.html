@@ -3,12 +3,10 @@
 <head>
 <title>KP Scan & Upload Document</title>
 
-<!-- MUST LOAD YOUR SERVICE CONFIG FIRST -->
-<script type="text/javascript" src="Resources/dynamsoft.service.config.js"></script>
-
-<!-- Dynamsoft WebTWAIN Core Scripts -->
-<script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
-<script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
+<!-- Dynamsoft scripts -->
+<script src="Resources/dynamsoft.webtwain.initiate.js"></script>
+<script src="Resources/dynamsoft.webtwain.config.js"></script>
+<script src="Resources/dynamsoft.service.config.js"></script>
 
 <style>
     body {
@@ -42,7 +40,6 @@
     #cancel-button { background-color: #dc3545; }
     #cancel-button:hover { background-color: #c82333; }
 
-    /* Preview Container */
     #dwtcontrolContainer {
         width: 500px;
         height: 600px;
@@ -62,42 +59,34 @@
 
 <div id="dwtcontrolContainer"></div>
 
-<script type="text/javascript">
-
-/* ---------------------------------------------------------
-   SERVICE MODE CONFIGURATION (NO POPUP)
---------------------------------------------------------- */
+<script>
+// 🚀 STEP 1 — Enable Dynamsoft Local Service Mode (no Chrome popup)
 Dynamsoft.DWT.ResourcesPath = "Resources";
-Dynamsoft.DWT.ProductKey =
-    "f0068ZQAAABvwZ61KmatKuSFLfk7lw/a7S1V+NVK1A18jG8OBy6/5kUgKdwBYAw3zmePXWq/Eidf5SfyS4HRCUsDmhb7H02M=";
+Dynamsoft.DWT.ProductKey = "f0068ZQAAABvwZ61KmatKuSFLfk7lw/a7S1V+NVK1A18jG8OBy6/5kUgKdwBYAw3zmePXWq/Eidf5SfyS4HRCUsDmhb7H02M=";
 
-/* Force Local Service instead of LAN/WiFi scanner detection */
 Dynamsoft.DWT.UseLocalService = true;
-
-/* Avoid Chrome "local network permission" popup */
 Dynamsoft.DWT.IfDetectDirectScanner = false;
 Dynamsoft.DWT.UseCameraViaHTTP = false;
-
-/* Stable for IFRAME / Business Central */
 Dynamsoft.DWT.IfDisableDefaultSettings = true;
 
-/* ---------------------------------------------------------
-   INITIALIZE OBJECT
---------------------------------------------------------- */
+// ---------------------------------------------------------
 let DWTObject = null;
+let scannedBlob = null;
 
+// Init WebTWAIN
 Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
     DWTObject = Dynamsoft.DWT.GetWebTwain("dwtcontrolContainer");
 });
 
-/* ---------------------------------------------------------
-   SCAN + PREVIEW
---------------------------------------------------------- */
+// Helper to read URL params from BC
+function getQueryParameter(name) {
+    const params = new URLSearchParams(window.location.search);
+    return params.get(name) || "";
+}
+
+// 🚀 STEP 2 — SCAN + preview
 function AcquireImage() {
-    if (!DWTObject) {
-        alert("Scanner not initialized.");
-        return;
-    }
+    if (!DWTObject) return;
 
     DWTObject.GetSourceNamesAsync()
         .then(sources => {
@@ -113,19 +102,72 @@ function AcquireImage() {
                 IfAppendImage: true
             })
         )
-        .catch(err => console.error("SCAN ERROR:", err));
+        .catch(err => console.error(err));
 }
 
-/* ---------------------------------------------------------
-   CLEAR PREVIEW
---------------------------------------------------------- */
-function ResetContainer() {
-    if (DWTObject) {
-        DWTObject.RemoveAllImages();
+// 🚀 STEP 3 — Upload scanned PDF to OneDrive AND return BC callback
+async function uploadToOneDrive() {
+
+    const accessToken = getQueryParameter("access_token");
+    const fileName = getQueryParameter("file_name");
+    const appType = getQueryParameter("application_type") || "application/pdf";
+
+    if (!accessToken || !fileName) {
+        alert("Missing access_token or file_name");
+        return;
+    }
+
+    const count = DWTObject.HowManyImagesInBuffer;
+    if (count === 0) {
+        alert("Nothing scanned!");
+        return;
+    }
+
+    // Convert all pages → single PDF Blob
+    const allIdx = [...Array(count).keys()];
+    scannedBlob = await DWTObject.ConvertToBlob(allIdx, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
+
+    const uploadUrl = `https://graph.microsoft.com/${fileName}`;
+
+    const response = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": appType
+        },
+        body: scannedBlob
+    });
+
+    if (response.ok) {
+        const json = await response.json();
+        alert("Upload success!");
+
+        // 🚀 SEND FILE URL BACK TO BUSINESS CENTRAL
+        if (window.opener) {
+            window.opener.postMessage(
+                { uploadedUrl: json.webUrl },
+                "*"   // or your BC domain: "https://your-bc-domain.com"
+            );
+        }
+
+        try { DWTObject.RemoveAllImages(); } catch(e){}
+
+        window.close(); // auto-close tab
+    } 
+    else {
+        const msg = await response.text();
+        alert("Upload failed:\n" + msg);
     }
 }
 
-</script>
+// Auto-upload after scan
+Dynamsoft.DWT.RegisterEvent("OnPostAllTransfers", uploadToOneDrive);
 
+// Clear preview
+function ResetContainer() {
+    if (DWTObject) DWTObject.RemoveAllImages();
+}
+
+</script>
 </body>
 </html>
