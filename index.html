@@ -2,216 +2,147 @@
 <html>
 <head>
 <title>KP Scan & Upload Document</title>
- 
-<!-- Dynamsoft scripts -->
-<script src="Resources/dynamsoft.webtwain.initiate.js"></script>
-<script src="Resources/dynamsoft.webtwain.config.js"></script>
-<script src="Resources/dynamsoft.service.config.js"></script>
- 
+<script type="text/javascript" src="Resources/dynamsoft.webtwain.initiate.js"></script>
+<script type="text/javascript" src="Resources/dynamsoft.webtwain.config.js"></script>
 <style>
-
-    body {
-
-        font-family: Arial, sans-serif;
-
-        display: flex;
-
-        flex-direction: column;
-
-        align-items: center;
-
-        background-color: #f4f4f4;
-
-        height: 100vh;
-
-    }
-
-    #input-container {
-
-        display: flex;
-
-        gap: 10px;
-
-        position: fixed;
-
-        top: 10px;
-
-        background-color: #f4f4f4;
-
-        padding: 10px;
-
-        z-index: 1000;
-
-    }
-
-    #scan-button, #cancel-button {
-
-        width: 200px;
-
-        height: 35px;
-
-        font-size: 16px;
-
-        color: white;
-
-        border: none;
-
-        border-radius: 5px;
-
-        cursor: pointer;
-
-    }
-
-    #scan-button { background-color: #28a745; }
-
-    #scan-button:hover { background-color: #218838; }
-
-    #cancel-button { background-color: #dc3545; }
-
-    #cancel-button:hover { background-color: #c82333; }
- 
-    #dwtcontrolContainer {
-
-        width: 500px;
-
-        height: 600px;
-
-        background-color: white;
-
-        border: 2px solid #ccc;
-
-        margin-top: 60px;
-
-    }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f4;
+            height: 100vh;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+            position: fixed;
+            top: 10px;
+            background-color: #f4f4f4;
+            padding: 10px;
+            z-index: 1000;
+        }
+        #scan-button, #cancel-button {
+            width: 200px;
+            height: 35px;
+            font-size: 16px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #scan-button { background-color: #28a745; }
+        #scan-button:hover { background-color: #218838; }
+        #cancel-button { background-color: #dc3545; }
+        #cancel-button:hover { background-color: #c82333; }
+        #dwtcontrolContainer {
+            width: 400px;
+            height: 500px;
+            background-color: white;
+            border: 2px solid #ccc;
+            margin-top: 60px;
+        }
 </style>
 </head>
- 
 <body>
- 
 <div id="input-container">
 <input type="button" id="scan-button" value="Scan" onclick="AcquireImage();" />
 <input type="button" id="cancel-button" value="Clear" onclick="ResetContainer();" />
 </div>
- 
 <div id="dwtcontrolContainer"></div>
+<script type="text/javascript">
+        let DWTObject = null;
+        let scannedBlob = null;
+        Dynamsoft.DWT.RegisterEvent("OnWebTwainReady", function () {
+            DWTObject = Dynamsoft.DWT.GetWebTwain('dwtcontrolContainer');
+        });
+        function getQueryParameter(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name) || "";
+        }
  
-<script>
-// (keep your existing helpers like getQueryParameter and CALLBACK_ORIGIN here)
-function getQueryParameter(name) {
-    const params = new URLSearchParams(window.location.search);
-    return params.get(name) || "";
-}
-const CALLBACK_ORIGIN = getQueryParameter("callback_origin") || "*";
-const RETURN_MODE = getQueryParameter("return_mode") || "onedrive"; // 'base64' or 'onedrive'
-const fileNameParam = getQueryParameter("file_name") || "scan.pdf";
- 
-// --- blob -> dataURL helper
-function blobToDataURL(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => { reader.abort(); reject(new Error('Failed to read blob')); };
-        reader.onload = () => resolve(reader.result); // "data:application/pdf;base64,...."
-        reader.readAsDataURL(blob);
-    });
-}
- 
-// --- send base64 back to opener (and close)
-async function sendBase64ToOpener(pdfBlob, suggestedFileName) {
-    try {
-        const dataUrl = await blobToDataURL(pdfBlob); // data:application/pdf;base64,...
-        const messagePayload = {
-            type: 'ScanCompleted',
-            dataType: 'base64',
-            filename: suggestedFileName || 'scan.pdf',
-            content: dataUrl
-        };
- 
-        if (window.opener && !window.opener.closed) {
-            const targetOrigin = CALLBACK_ORIGIN === "*" ? "*" : CALLBACK_ORIGIN;
-            try {
-                window.opener.postMessage(messagePayload, targetOrigin);
-            } catch (err) {
-                // fallback for testing
-                window.opener.postMessage(messagePayload, '*');
+        // Acquire image(s) and append to the buffer so multi-page scans are retained.
+        function AcquireImage() {
+            if (DWTObject) {
+                DWTObject.GetSourceNamesAsync()
+                    .then(sources => {
+                        if (sources.length === 0) {
+                            alert("No scanner detected. Please connect a scanner and try again.");
+                            return Promise.reject("No scanner available.");
+                        }
+                        return DWTObject.OpenSourceAsync();
+                    })
+                    .then(() => {
+                        // IMPORTANT: set IfAppendImage: true so multiple acquisitions append pages
+                        return DWTObject.AcquireImageAsync({
+                            IfAppendImage: true,
+                            IfCloseSourceAfterAcquire: true,
+                            // optional settings:
+                            // IfFeederEnabled: true,
+                            // Resolution: 200,
+                            // PixelType: 2
+                        });
+                    })
+                    .then(() => {
+                        // Convert ALL images in the buffer (not just the last one) into a single PDF blob.
+                        const count = DWTObject.HowManyImagesInBuffer || 0;
+                        if (count === 0) {
+                            console.warn("No images in buffer after acquire.");
+                            return Promise.reject("No images in buffer.");
+                        }
+                        // build array of indices [0,1,2,...,count-1]
+                        const allIndices = Array.from({ length: count }, (_, i) => i);
+                        return DWTObject.ConvertToBlob(allIndices, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
+                    })
+                    .then((result) => {
+                        scannedBlob = result;
+                        uploadToOneDrive(); // Automatically upload after scan (unchanged behavior)
+                    })
+                    .catch(exp => {
+                        // keep the original minimal error handling; log message if available
+                        console.error(exp && exp.message ? exp.message : exp);
+                    });
             }
-            // optionally close scanner tab
-            try { window.close(); } catch (e) {}
-        } else {
-            // fallback: show link / data for manual copy
-            console.warn('Opener not available — show manual download / copy.');
-            // e.g., show dataUrl in the page or create a download link
-            const a = document.createElement('a');
-            a.href = dataUrl;
-            a.download = suggestedFileName || 'scan.pdf';
-            a.text = 'Download scanned PDF';
-            document.body.appendChild(a);
         }
-    } catch (err) {
-        console.error('Failed to convert/send base64', err);
+ 
+        async function uploadToOneDrive() {
+    const accessToken = getQueryParameter("access_token");
+    const fileName = getQueryParameter("file_name"); // This includes full Graph path after domain
+    const applicationType = getQueryParameter("application_type") || "application/pdf";
+    if (!accessToken || !fileName) {
+        alert("Missing access_token or file_name in URL.");
+        return;
     }
-}
- 
-// --- Existing Dynamsoft flow: when all images transferred, create PDF blob
-async function uploadOrReturnBase64() {
+    const uploadUrl = `https://graph.microsoft.com/${fileName}`;
     try {
-        const count = DWTObject.HowManyImagesInBuffer;
-        if (count === 0) {
-            alert("Nothing scanned!");
-            return;
-        }
- 
-        // convert scanned images to single PDF blob (you already do this)
-        const allIdx = [...Array(count).keys()];
-        const scannedBlob = await DWTObject.ConvertToBlob(allIdx, Dynamsoft.DWT.EnumDWT_ImageType.IT_PDF);
- 
-        if (RETURN_MODE === 'base64') {
-            // send base64 back to BC
-            await sendBase64ToOpener(scannedBlob, fileNameParam);
-            // clear buffer
-            try { DWTObject.RemoveAllImages(); } catch(e){}
-            return;
-        }
- 
-        // else: existing OneDrive upload flow (keeps your original code)
-        const accessToken = getQueryParameter("access_token");
-        const appType = getQueryParameter("application_type") || "application/pdf";
-        if (!accessToken) {
-            alert("Missing access_token for OneDrive upload");
-            return;
-        }
- 
-        const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(fileNameParam)}:/content`;
         const response = await fetch(uploadUrl, {
             method: "PUT",
             headers: {
                 "Authorization": `Bearer ${accessToken}`,
-                "Content-Type": appType
+                "Content-Type": applicationType
             },
             body: scannedBlob
         });
- 
         if (response.ok) {
             const json = await response.json();
-            const resultUrl = json.webUrl || json["@microsoft.graph.downloadUrl"] || json.id || null;
-            const msg = { type: "ScanCompleted", url: resultUrl || ("urn:onedrive:" + (json.id || fileNameParam)) };
-            if (window.opener && !window.opener.closed) {
-                try { window.opener.postMessage(msg, CALLBACK_ORIGIN); } catch(e) { window.opener.postMessage(msg, '*'); }
-            }
-            try { DWTObject.RemoveAllImages(); } catch(e){}
-            try { window.close(); } catch(e){}
+            alert("File uploaded successfully to OneDrive!"); // ✅ Commented as requested
+            console.log("Upload successful. File URL:", json.webUrl);
+            // Optionally clear buffer after successful upload:
+            try { if (DWTObject) DWTObject.RemoveAllImages(); } catch(e) { console.warn(e); }
         } else {
-            const txt = await response.text();
-            alert("Upload failed:\n" + txt);
+            const errorText = await response.text();
+            alert("Upload failed:\n" + errorText);
+            console.error("Upload failed:", errorText);
         }
     } catch (err) {
-        console.error(err);
+        alert("An unexpected error occurred.");
+        console.error("Upload error:", err);
     }
 }
  
-// register Dynamsoft event to call our unified handler
-Dynamsoft.DWT.RegisterEvent("OnPostAllTransfers", uploadOrReturnBase64);
+        function ResetContainer() {
+            location.reload();
+        }
 </script>
 </body>
 </html>
-
- 
